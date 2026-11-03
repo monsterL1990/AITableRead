@@ -63,7 +63,7 @@ test("custom preference stays on the custom API even when DSH and CLIProxy are r
   assert.equal(incomplete.textRoute, "custom");
   assert.equal(resolveTextRoute(both, "custom"), "custom");
   assert.match(incomplete.textRouteNote, /缺 API Key/);
-  assert.match(incomplete.textRouteNote, /不会改用 CLIProxy/);
+  assert.match(incomplete.textRouteNote, /不会改用环境里的 OpenAI 兼容接口/);
   assert.match(incomplete.textRouteNote, /不会换成演示稿/);
   const incompleteConfig = publicConfigRouteFields(
     both,
@@ -114,7 +114,7 @@ test("generation plan uses the saved custom endpoint and refuses an incomplete o
   assert.throws(
     () => planGeneration("custom", { baseUrl: "", apiKey: secret, model: "" }, both),
     (error: Error) => {
-      assert.match(error.message, /不会改用 CLIProxy/);
+      assert.match(error.message, /不会改用环境里的 OpenAI 兼容接口/);
       assert.match(error.message, /不会换成演示稿/);
       assert.equal(error.message.includes(secret), false);
       assert.equal(error.message.includes("env-cliproxy-key"), false);

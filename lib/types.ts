@@ -9,7 +9,7 @@ export type VersionSource = "generate" | "feedback" | "quality" | "manual" | "im
 /** 出字实际走的路。custom 是设置里保存的 OpenAI 兼容接口。默认不经 DSH；打开 purge 后仍记这条偏好，提交改走 DSH 临时 provider。 */
 export type TextRoute = "dsh" | "cliproxy" | "custom" | "demo";
 
-/** 用户希望走的路。稿库没存过时按环境默认：配齐 DSH 则 dsh，否则 cliproxy。custom 只能手选。 */
+/** 用户希望走的路。稿库没存过时按环境默认：配齐 DSH 则 dsh，否则环境里的 OpenAI 兼容接口（cliproxy）。custom 只能手选。 */
 export type PreferredTextRoute = "dsh" | "cliproxy" | "custom";
 
 /** 经 DSH 时改用目录里的某一对。null 表示新开会话沿用内核默认。 */

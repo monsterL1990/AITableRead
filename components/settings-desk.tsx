@@ -21,8 +21,15 @@ function dshBlockedCopy(missing: string[]): string {
 
 function savedRouteLabel(next: PreferredTextRoute): string {
   if (next === "dsh") return "已改成经 DSH。";
-  if (next === "custom") return "已改成自定义 API。";
-  return "已改成直连 CLIProxy。";
+  if (next === "custom") return "已改成自定义 OpenAI 兼容接口。";
+  return "已改成环境里的 OpenAI 兼容接口。";
+}
+
+export function settingsIntro(visibility: "custom-only" | "full" | "hidden"): string {
+  if (visibility === "custom-only") {
+    return "这个账号只用自己的 OpenAI 兼容接口出字。密钥存在你的稿库里。默认直连，不经 purge。可以打开「经 DSH purge」，改走站点 DSH。密钥先空着也能打开页面。";
+  }
+  return "推荐用你自己的 OpenAI 兼容接口出字。写在 .env 的 OPENAI_BASE_URL 和 OPENAI_API_KEY 里，或把接口地址、API Key 和模型保存在下面。密钥先空着也能打开页面，这时会提示你去配置 API，不会崩溃。经 DSH 是可选项，不是默认。";
 }
 
 export function purgeSwitchDescription(enabled: boolean, scope: "custom-only" | "full"): string {
@@ -241,11 +248,7 @@ export function SettingsDesk({
       <div className="mx-auto max-w-2xl space-y-5">
         <div>
           <h1 className="text-2xl font-medium">设置</h1>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {visibility === "custom-only"
-              ? "这个账号只用自己的 API Key 出字。密钥存在你的稿库里。默认直连，不经 purge。可以打开「经 DSH purge」，改走站点 DSH。"
-              : "出字走哪条路，存在这台围读的稿库里，换浏览器也还在。"}
-          </p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{settingsIntro(visibility)}</p>
         </div>
         {loading ? <p className="text-sm text-muted-foreground">正在读取设置…</p> : null}
         {error ? (
@@ -257,31 +260,10 @@ export function SettingsDesk({
           <section className="sheet rounded-lg border border-border px-4 py-4">
             <h2 className="text-base font-medium">出字路由</h2>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              经 DSH 更慢，但合规清洗随会话生效。直连 CLIProxy 用环境里的代理。自定义 API 默认直连，不经 purge；同一区可以打开「经 DSH purge」，用这把 Key 走 DSH。这条选择管大纲、初稿、润色、读者审、结构质检、按意见改稿，以及按需求生成读者。
+              默认走 OpenAI 兼容接口：.env 里的地址和密钥，或下面保存的自定义接口。自定义接口默认直连，不经 purge；同一区可以打开「经 DSH purge」。经 DSH 更慢，只有你自己配齐了才选。这条选择管大纲、初稿、润色、读者审、结构质检、按意见改稿，以及按需求生成读者。没在这里选过、并且 DSH 三项都已填写时，出字仍会先走 DSH。
             </p>
             <fieldset className="mt-4 space-y-2" disabled={busy}>
               <legend className="sr-only">出字路由</legend>
-              <label
-                className={`flex gap-3 rounded-lg border px-3 py-3 ${selected === "dsh" ? "border-primary bg-accent/60" : "border-border"} ${view.dshConfigured ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}
-              >
-                <input
-                  type="radio"
-                  name="preferredTextRoute"
-                  value="dsh"
-                  className="mt-1 accent-[#8f2d2a]"
-                  checked={selected === "dsh"}
-                  disabled={!view.dshConfigured || busy}
-                  onChange={() => void choose("dsh")}
-                />
-                <span>
-                  <span className="font-medium">经 DSH（含合规清洗）</span>
-                  {view.dshConfigured ? (
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">更慢。轮询会话，purge 随这次回复生效。</span>
-                  ) : (
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshBlockedCopy(view.dshMissing)}</span>
-                  )}
-                </span>
-              </label>
               <label
                 className={`flex cursor-pointer gap-3 rounded-lg border px-3 py-3 ${selected === "cliproxy" ? "border-primary bg-accent/60" : "border-border"}`}
               >
@@ -295,8 +277,10 @@ export function SettingsDesk({
                   onChange={() => void choose("cliproxy")}
                 />
                 <span>
-                  <span className="font-medium">直连 CLIProxy</span>
-                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">更快。不经 DSH 会话，也不经 purge。</span>
+                  <span className="font-medium">OpenAI 兼容接口（.env，推荐）</span>
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                    读取 OPENAI_BASE_URL、OPENAI_API_KEY 和 OPENAI_MODEL。不经 DSH，也不经 purge。以前这条显示成 CLIProxy，它不是要另外安装的代理。
+                  </span>
                 </span>
               </label>
               <label
@@ -312,15 +296,36 @@ export function SettingsDesk({
                   onChange={() => void choose("custom")}
                 />
                 <span>
-                  <span className="font-medium">自定义 API</span>
+                  <span className="font-medium">自定义 OpenAI 兼容接口</span>
                   {view.customApi.configured ? (
                     <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                      直连你保存的 OpenAI 兼容接口，例如 DeepSeek。不经 DSH，也不经 purge。
+                      直连你保存在稿库里的接口，例如 DeepSeek。不经 DSH，也不经 purge。
                     </span>
                   ) : (
                     <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                      还没填全（缺 {view.customApi.missing.join("、")}），这条现在不能选。
+                      还没填全（缺 {view.customApi.missing.join("、")}）。先在下面保存三项再选。空着也不会让页面崩溃。
                     </span>
+                  )}
+                </span>
+              </label>
+              <label
+                className={`flex gap-3 rounded-lg border px-3 py-3 ${selected === "dsh" ? "border-primary bg-accent/60" : "border-border"} ${view.dshConfigured ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}
+              >
+                <input
+                  type="radio"
+                  name="preferredTextRoute"
+                  value="dsh"
+                  className="mt-1 accent-[#8f2d2a]"
+                  checked={selected === "dsh"}
+                  disabled={!view.dshConfigured || busy}
+                  onChange={() => void choose("dsh")}
+                />
+                <span>
+                  <span className="font-medium">经 DSH（可选）</span>
+                  {view.dshConfigured ? (
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">更慢。轮询会话，purge 随这次回复生效。不是本机的默认路径。</span>
+                  ) : (
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshBlockedCopy(view.dshMissing)}</span>
                   )}
                 </span>
               </label>
@@ -381,10 +386,10 @@ export function SettingsDesk({
         {view && sections.showCustomApi ? (
           <section aria-labelledby="custom-api-title" className="sheet rounded-lg border border-border px-4 py-4">
             <h2 id="custom-api-title" className="text-base font-medium">
-              自定义 API
+              自定义 OpenAI 兼容接口（推荐）
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              给 DeepSeek 或其它 OpenAI 兼容接口。官方根地址是 {DEEPSEEK_OPENAI_BASE_URL}，也可以写成 https://api.deepseek.com/v1。建议模型 deepseek-flash 或 deepseek-v4-pro，也可以改成 deepseek-chat、deepseek-reasoner。思考过程不会写入稿子。
+              这是本机推荐的出字方式：任意 OpenAI Chat Completions 兼容接口，例如 DeepSeek。官方根地址是 {DEEPSEEK_OPENAI_BASE_URL}，也可以写成 https://api.deepseek.com/v1。建议模型 deepseek-flash 或 deepseek-v4-pro，也可以改成 deepseek-chat、deepseek-reasoner。三项都空着时页面照常打开，并提示你来这里配置，不会崩溃。思考过程不会写入稿子。
             </p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               密钥只存在这台围读的稿库里。页面上只显示末尾四位。密钥框留空表示不修改已保存的密钥。

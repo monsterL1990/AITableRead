@@ -484,7 +484,7 @@ test("review and quality logs name whether the words came through DSH", () => {
   assert.match(project.log.at(-1)!.summary, /经 DSH/);
   assert.equal(stepReviews(project, 1).length, 1);
   applyQualityReport(project, 2, "清单", "cliproxy");
-  assert.match(project.log.at(-1)!.summary, /经 CLIProxy/);
+  assert.match(project.log.at(-1)!.summary, /经 OpenAI 兼容接口/);
   assert.equal(stepReviews(project, 2).length, 0);
 });
 
@@ -493,7 +493,7 @@ test("markdown export names the text route and keeps no compliance markers", () 
   assert.equal(handoff.provider, "cliproxy");
   assert.equal(handoff.status, "not-configured");
   assert.match(handoff.note, /未配齐 DSH/);
-  assert.match(handoff.note, /CLIProxy/);
+  assert.match(handoff.note, /OpenAI 兼容接口/);
   assert.doesNotMatch(handoff.note, /永不|跑一次合规清洗/);
 
   const configured = complianceHandoff({
@@ -511,7 +511,7 @@ test("markdown export names the text route and keeps no compliance markers", () 
     OPENAI_API_KEY: "secret",
   });
   assert.equal(cliproxy.status, "not-configured");
-  assert.match(cliproxy.note, /出字经 CLIProxy/);
+  assert.match(cliproxy.note, /出字经 OpenAI 兼容接口/);
 
   const project = createProjectRecord({ id: "p4", ownerId: "local", title: "回声", idea: "想法" });
   project.outline = "大纲";

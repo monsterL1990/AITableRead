@@ -58,6 +58,9 @@ export function LoginForm() {
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           登录后只看自己的稿。可以从想法、大纲或一份完整稿件开始。每一步改到认可再确认，读者可请可不请。没有公开注册。
         </p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          本机用你自己的 OpenAI 兼容接口。密钥可以先空着：进入之后如果还没接上，页面会提示你去设置里配置 API，不会因此打不开。
+        </p>
         <div className="mt-6 space-y-2">
           <Label htmlFor="uid">账号</Label>
           <Input

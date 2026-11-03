@@ -58,7 +58,7 @@ export function customSelectionError(config: CustomApiConfig): string | null {
 
 export function customIncompleteMessage(missing: string[]): string {
   const listed = missing.length ? `（缺 ${missing.join("、")}）` : "";
-  return `自定义 API 还没填全${listed}。请到设置里补上接口地址、API Key 和模型。这次不会改用 CLIProxy，也不会换成演示稿。`;
+  return `自定义 API 还没填全${listed}。请到设置里补上接口地址、API Key 和模型。这次不会改用环境里的 OpenAI 兼容接口，也不会换成演示稿。`;
 }
 
 export function toPublicCustomApi(config: CustomApiConfig): PublicCustomApi {

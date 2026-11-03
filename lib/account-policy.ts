@@ -163,7 +163,7 @@ export function settingsWrite(
   if (isPresetAccount(type)) return { ok: false, status: 403, error: "预设账号不能改出字设置。" };
   if (type === "custom") {
     if (patch.preferredTextRoute && patch.preferredTextRoute !== "custom") {
-      return { ok: false, status: 400, error: "这个账号只能使用自定义 API，不能改经 DSH 或直连 CLIProxy。" };
+      return { ok: false, status: 400, error: "这个账号只能使用自定义 API，不能改经 DSH 或环境里的 OpenAI 兼容接口。" };
     }
     if (patch.dshModel !== undefined) return { ok: false, status: 400, error: "这个账号不经 DSH，不能改模型。" };
     if (!patch.customApi && !patch.preferredTextRoute && patch.purgeEnabled === undefined) {

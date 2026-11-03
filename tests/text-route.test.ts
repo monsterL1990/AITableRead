@@ -17,6 +17,19 @@ const both = {
   OPENAI_MODEL: "grok-4.6",
 };
 
+test("empty OpenAI keys stay in demo mode and do not throw", () => {
+  const config = publicConfigRouteFields(
+    { OPENAI_BASE_URL: "", OPENAI_API_KEY: "", OPENAI_MODEL: "", DSH_BASE_URL: "", DSH_TOKEN: "", DSH_SESSION_ID: "" },
+    null,
+    { devPasswordHint: true, authConfigured: true },
+  );
+  assert.equal(config.demoMode, true);
+  assert.equal(config.textRoute, "demo");
+  assert.deepEqual(config.missing, ["OPENAI_BASE_URL", "OPENAI_API_KEY"]);
+  assert.equal(config.customApi.apiKeyMask, "");
+  assert.equal("apiKey" in config.customApi, false);
+});
+
 test("preference defaults to dsh when DSH is configured", () => {
   assert.equal(resolveTextRoute(both), "dsh");
   assert.equal(resolveTextRoute(both, null), "dsh");
@@ -51,11 +64,11 @@ test("cliproxy preference forces CLIProxy even when DSH is configured", () => {
   assert.equal(JSON.stringify(config).includes("secret-key"), false);
   const handoff = complianceHandoff(both, "cliproxy");
   assert.equal(handoff.provider, "cliproxy");
-  assert.match(handoff.note, /出字经 CLIProxy/);
+  assert.match(handoff.note, /出字经 OpenAI 兼容接口/);
   assert.doesNotMatch(handoff.note, /未配齐 DSH/);
   const project = createProjectRecord({ id: "p-route", ownerId: "local", title: "回声", idea: "想法" });
   const markdown = projectToMarkdown(project, "current", { textRoute: "cliproxy", dshConfigured: true });
-  assert.match(markdown, /出字经 CLIProxy/);
+  assert.match(markdown, /出字经 OpenAI 兼容接口/);
   assert.doesNotMatch(markdown, /未配齐 DSH/);
 });
 
@@ -74,7 +87,7 @@ test("dsh preference is ignored when DSH is not configured", () => {
   assert.equal(described.textRoute, "cliproxy");
   assert.match(described.textRouteNote, /未配齐 DSH/);
   assert.match(described.textRouteNote, /DSH_TOKEN/);
-  assert.match(described.textRouteNote, /CLIProxy/);
+  assert.match(described.textRouteNote, /OpenAI 兼容接口/);
   const config = publicConfigRouteFields(partial, "dsh", { devPasswordHint: false, authConfigured: true });
   assert.equal(config.textRoute, "cliproxy");
   assert.equal(config.preferredTextRoute, "dsh");

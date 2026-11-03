@@ -67,7 +67,7 @@ export async function PATCH(request: Request) {
   if (hasPurge && typeof body.purgeEnabled !== "boolean") return errorJson("「经 DSH purge」只能打开或关掉。", 400);
   if (user.type === "custom" && hasDshModel) return errorJson("这个账号不经 DSH，不能改模型。", 400);
   if (user.type === "custom" && hasRoute && body.preferredTextRoute !== "custom") {
-    return errorJson("这个账号只能使用自定义 API，不能改经 DSH 或直连 CLIProxy。", 400);
+    return errorJson("这个账号只能使用自定义 API，不能改经 DSH 或环境里的 OpenAI 兼容接口。", 400);
   }
 
   let current;

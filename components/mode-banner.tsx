@@ -62,7 +62,7 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
         <p>
           大纲、初稿、润色、读者审、结构质检和按意见改稿都交给已配置的 DSH 会话。
           {chosen ? `这一轮用目录里的 ${chosen}。` : "没另选模型时，新开会话沿用模板会话当前的模型。"}
-          合规清洗随该会话生效。这几步不直连 CLIProxy，也不走自定义 API 的密钥。要改走直连，去
+          合规清洗随该会话生效。这几步不走环境里的 OpenAI 兼容接口，也不走自定义 API 的密钥。要改走那条接口，去
           <Link href="/settings" className="text-foreground underline underline-offset-4">
             设置
           </Link>
@@ -77,7 +77,7 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
         <div className="rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-4 py-3 text-sm leading-6">
           <p className="font-medium">自定义 API 还没填全</p>
           <p className="text-muted-foreground">
-            {config.textRouteNote || "请到设置里补上接口地址、API Key 和模型。这次不会改用 CLIProxy，也不会换成演示稿。"}{" "}
+            {config.textRouteNote || "请到设置里补上接口地址、API Key 和模型。这次不会改用环境里的 OpenAI 兼容接口，也不会换成演示稿。"}{" "}
             <Link href="/settings" className="text-foreground underline underline-offset-4">
               打开设置
             </Link>
@@ -95,7 +95,7 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
             "这个账号只用自己的密钥，没有别的出字路由。"
           ) : (
             <>
-              要改走经 DSH 或直连 CLIProxy，去
+              要改走经 DSH 或环境里的 OpenAI 兼容接口，去
               <Link href="/settings" className="text-foreground underline underline-offset-4">
                 设置
               </Link>
@@ -112,26 +112,20 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
     );
   }
   if (config.demoMode || config.textRoute === "demo") {
-    const missing = config.missing.length ? config.missing.join("、") : "模型环境变量";
-    if (config.dshConfigured) {
-      return (
-        <div className="rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-4 py-3 text-sm leading-6">
-          <p className="font-medium">演示模式</p>
-          <p className="text-muted-foreground">
-            你在
-            <Link href="/settings" className="text-foreground underline underline-offset-4">
-              设置
-            </Link>
-            里选了直连 CLIProxy，但未配置 {missing}。现在生成的是可编辑的中文占位稿，用来把三步走通。DSH 已配置，可以改回经 DSH。
-          </p>
-        </div>
-      );
-    }
+    const missing = config.missing.length ? config.missing.join("、") : "OPENAI_BASE_URL、OPENAI_API_KEY";
     return (
       <div className="rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-4 py-3 text-sm leading-6">
-        <p className="font-medium">演示模式</p>
+        <p className="font-medium">请先配置 API</p>
         <p className="text-muted-foreground">
-          {dshFallbackNote(config.dshMissing)}未配置 {missing}。现在生成的是可编辑的中文占位稿，用来把三步走通。要出真实文字，把 OPENAI_BASE_URL 和 OPENAI_API_KEY 指到你自己的 OpenAI 兼容接口。
+          {config.dshConfigured
+            ? `你选了环境里的 OpenAI 兼容接口，但还没有 ${missing}。`
+            : `${dshFallbackNote(config.dshMissing)}还没有 ${missing}。`}
+          页面可以继续用，生成的是可编辑的演示稿，不会因此崩溃。到
+          <Link href="/settings" className="text-foreground underline underline-offset-4">
+            设置
+          </Link>
+          里填写接口地址、API Key 和模型，或在 .env 里填写 OPENAI_BASE_URL 和 OPENAI_API_KEY。
+          {config.dshConfigured ? "DSH 已配置，也可以改回经 DSH。" : "经 DSH 不是默认路径。"}
         </p>
       </div>
     );
@@ -139,7 +133,7 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
   const lines = connectedModelLines(config.model ?? "", config.baseUrl);
   return (
     <div className="rounded-lg border border-border bg-paper px-4 py-3 text-sm leading-6 text-muted-foreground">
-      <p className="font-medium text-foreground">出字经 CLIProxy。</p>
+      <p className="font-medium text-foreground">出字经 OpenAI 兼容接口。</p>
       <p>
         {config.dshConfigured ? (
           <>
@@ -147,7 +141,7 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
             <Link href="/settings" className="text-foreground underline underline-offset-4">
               设置
             </Link>
-            里选了直连 CLIProxy。DSH 已配置，这次不走那条会话，也不经 purge。
+            里选了环境里的 OpenAI 兼容接口。DSH 已配置，这次不走那条会话，也不经 purge。
           </>
         ) : (
           dshFallbackNote(config.dshMissing)

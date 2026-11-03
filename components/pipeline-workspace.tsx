@@ -1063,7 +1063,7 @@ export function PipelineWorkspace({ id }: { id: string }) {
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>流程记录</DialogTitle>
-            <DialogDescription>按时间先后。生成、意见原文、读者、质检、确认和回滚都留在这份稿子里。出字一条会写明经 DSH、经 CLIProxy，还是经自定义 API。</DialogDescription>
+            <DialogDescription>按时间先后。生成、意见原文、读者、质检、确认和回滚都留在这份稿子里。出字一条会写明经 DSH、经 OpenAI 兼容接口，还是经自定义 API。</DialogDescription>
           </DialogHeader>
           {project.log.length === 0 ? <p className="text-sm text-muted-foreground">还没有记录。</p> : null}
           <ol className="space-y-3">
