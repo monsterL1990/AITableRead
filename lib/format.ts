@@ -24,7 +24,7 @@ export function safeFilename(title: string): string {
 
 export function routeMark(route: TextRoute): string {
   if (route === "dsh") return "经 DSH";
-  if (route === "cliproxy") return "经 CLIProxy";
+  if (route === "cliproxy") return "经 OpenAI 兼容接口";
   if (route === "custom") return "经自定义 API";
   return "演示稿";
 }

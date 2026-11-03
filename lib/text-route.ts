@@ -15,10 +15,10 @@ export type RouteEnv = DshEnv & {
 
 /**
  * 出字走哪条路。
- * preference 缺省或为 null：配齐 DSH 则 dsh，否则 CLIProxy，再不行是演示稿。
- * preference 为 cliproxy：即使 DSH 已配齐也不走 DSH。
- * preference 为 dsh 但环境未配齐：退回 CLIProxy 或演示稿。
- * preference 为 custom：始终是自定义 API，不退回 CLIProxy 或演示稿。没填全时由调用方报错。
+ * preference 缺省或为 null：配齐 DSH 则 dsh，否则环境里的 OpenAI 兼容接口，再不行是演示稿。
+ * preference 为 cliproxy：即使 DSH 已配齐也不走 DSH。界面把这条叫做 OpenAI 兼容接口（.env）。
+ * preference 为 dsh 但环境未配齐：退回 OpenAI 兼容接口或演示稿。
+ * preference 为 custom：始终是设置里保存的自定义 API，不退回环境变量或演示稿。没填全时由调用方报错。
  */
 export function resolveTextRoute(env?: RouteEnv, preference?: PreferredTextRoute | null): TextRoute {
   if (preference === "custom") return "custom";
@@ -41,7 +41,7 @@ export type GenerationPlan =
   | { transport: "custom"; llm: LlmConfig };
 
 /**
- * 生成、读者生成共用的出字选择。custom 只用稿库里的接口，不用环境里的 CLIProxy 密钥。
+ * 生成、读者生成共用的出字选择。custom 只用稿库里的接口，不用环境里的 OpenAI 兼容接口密钥。
  * ephemeralProvider 为真时不直连：DSH 没配齐就报错，Remote 未就绪由 DSH 客户端再报，不改成直连。
  */
 export function planGeneration(
@@ -85,10 +85,10 @@ function unmetPreferenceNote(preferred: PreferredTextRoute, route: TextRoute, ds
   if (preferred === "dsh" && route !== "dsh") {
     const why =
       dshMissing.length > 0 && dshMissing.length < 3 ? `未配齐 DSH（缺 ${dshMissing.join("、")}）` : "未配齐 DSH";
-    return route === "demo" ? `${why}，CLIProxy 也未接上，出字仍是演示稿。` : `${why}，出字改为经 CLIProxy。`;
+    return route === "demo" ? `${why}，OpenAI 兼容接口也未接上，出字仍是演示稿。` : `${why}，出字改为经 OpenAI 兼容接口。`;
   }
   if (preferred === "cliproxy" && route !== "cliproxy") {
-    return "直连 CLIProxy 还没接上模型，出字仍是演示稿。";
+    return "环境里的 OpenAI 兼容接口还没接上模型，出字仍是演示稿。";
   }
   return "";
 }
@@ -124,7 +124,7 @@ export function parsePreferredTextRoute(
   dshConfigured: boolean,
 ): { ok: true; route: PreferredTextRoute } | { ok: false; error: string } {
   if (value !== "dsh" && value !== "cliproxy" && value !== "custom") {
-    return { ok: false, error: "出字路由只能是经 DSH、直连 CLIProxy，或自定义 API。" };
+    return { ok: false, error: "出字路由只能是经 DSH、环境里的 OpenAI 兼容接口，或自定义 API。" };
   }
   if (value === "dsh" && !dshConfigured) {
     return { ok: false, error: "未配齐 DSH，不能改走这条。" };

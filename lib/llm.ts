@@ -121,7 +121,7 @@ async function requestChat(config: LlmConfig, args: ChatArgs, stream: boolean): 
     const hint =
       config.kind === "custom"
         ? "连不上自定义 API。请确认接口地址能从这台机器访问。"
-        : "连不上模型服务。请确认 CLIProxy 已启动，并且这台机器能访问 OPENAI_BASE_URL。";
+        : "连不上模型服务。请确认这台机器能访问 OPENAI_BASE_URL 上的 OpenAI 兼容接口。";
     throw new Error(`${hint}${reason ? ` ${reason}` : ""}`);
   }
 

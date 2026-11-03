@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   },
   // Dev server hostname is localhost; the desk is opened at 127.0.0.1.
   // Without this, Next blocks /_next/hmr and the page never hydrates.
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   turbopack: {
     rules: {
       "*.css": {

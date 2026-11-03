@@ -56,7 +56,7 @@ test("connected model copy keeps the model, url, and key note apart", () => {
   const text = textOf(html);
   assert.equal(text.includes("grok-4.6http"), false);
   assert.equal(text.includes("v1密钥"), false);
-  assert.match(text, /出字经 CLIProxy/);
+  assert.match(text, /出字经 OpenAI 兼容接口/);
   assert.match(text, /未配齐 DSH，出字不经 DSH/);
   assert.match(text, /grok-4\.6 /);
   assert.match(text, /llm\.example\/v1 /);
@@ -107,7 +107,7 @@ test("connected model copy keeps the model, url, and key note apart", () => {
       }),
     ),
   );
-  assert.match(chosen, /出字经 CLIProxy/);
+  assert.match(chosen, /出字经 OpenAI 兼容接口/);
   assert.match(chosen, /不经 purge/);
   assert.equal(chosen.includes("未配齐 DSH"), false);
   const customHtml = textOf(
@@ -148,7 +148,7 @@ test("connected model copy keeps the model, url, and key note apart", () => {
           textRoute: "custom",
           model: null,
           baseUrl: null,
-          textRouteNote: "自定义 API 还没填全（缺 API Key）。请到设置里补上接口地址、API Key 和模型。这次不会改用 CLIProxy，也不会换成演示稿。",
+          textRouteNote: "自定义 API 还没填全（缺 API Key）。请到设置里补上接口地址、API Key 和模型。这次不会改用环境里的 OpenAI 兼容接口，也不会换成演示稿。",
           customApi: {
             baseUrl: "https://api.deepseek.com",
             model: "deepseek-flash",
@@ -161,9 +161,31 @@ test("connected model copy keeps the model, url, and key note apart", () => {
     ),
   );
   assert.match(incomplete, /自定义 API 还没填全/);
-  assert.match(incomplete, /不会改用 CLIProxy/);
+  assert.match(incomplete, /不会改用环境里的 OpenAI 兼容接口/);
   assert.match(incomplete, /不会换成演示稿/);
   assert.equal(incomplete.includes("演示模式"), false);
+});
+
+test("empty API keys render a configure-API nudge instead of crashing", () => {
+  const demo: PublicConfig = {
+    ...config,
+    demoMode: true,
+    missing: ["OPENAI_BASE_URL", "OPENAI_API_KEY"],
+    model: null,
+    baseUrl: null,
+    textRoute: "demo",
+    dshConfigured: false,
+    dshMissing: ["DSH_BASE_URL", "DSH_TOKEN", "DSH_SESSION_ID"],
+    preferredTextRoute: "cliproxy",
+    textRouteNote: "",
+  };
+  const html = renderToStaticMarkup(createElement(ModeBanner, { config: demo }));
+  const text = textOf(html);
+  assert.match(text, /请先配置 API/);
+  assert.match(text, /不会因此崩溃/);
+  assert.match(text, /OPENAI_BASE_URL/);
+  assert.match(html, /href="\/settings"/);
+  assert.equal(text.includes("出字经 OpenAI 兼容接口。"), false);
 });
 
 test("save failure before review says the readers never started", () => {

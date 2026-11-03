@@ -6,7 +6,7 @@ import type { PreferredTextRoute, TextRoute } from "./types";
  * 合规不靠正文里的【合规修改开始/结束】标记。那是另一套多 bot 群聊流水线的记号，本站不写、不解析、不高亮。
  *
  * 配齐 DSH 时，出字提交到指定会话。该会话应挂 purge / dsh-purge-community，清洗随回复生效，不再另跑一次。
- * 未配齐时出字退回 CLIProxy（或演示稿）。设置里的自定义 API 默认直连 OpenAI 兼容接口，不经这次会话，也不经 purge。
+ * 未配齐时出字退回环境里的 OpenAI 兼容接口（或演示稿）。设置里的自定义 API 默认直连，不经这次会话，也不经 purge。
  * 打开「经 DSH purge」后，同一把 Key 只在这一轮挂上临时 provider，清洗仍随模板会话的 agentPreset 生效。
  * 不把围读嵌进 DSH 界面，也不在代码里写死某一台现成站点。
  */
@@ -56,16 +56,16 @@ export function complianceNoteForRoute(route: TextRoute, dshConfigured: boolean,
       provider: "cliproxy",
       status: "not-configured",
       note: dshConfigured
-        ? "已改走直连 CLIProxy，但模型未接上。这份导出没有单独的合规清洗。"
-        : "未配齐 DSH，也未接 CLIProxy。这份导出没有单独的合规清洗。",
+        ? "已改走环境里的 OpenAI 兼容接口，但模型未接上。这份导出没有单独的合规清洗。"
+        : "未配齐 DSH，也未接 OpenAI 兼容接口。这份导出没有单独的合规清洗。",
     };
   }
   return {
     provider: "cliproxy",
     status: "not-configured",
     note: dshConfigured
-      ? "出字经 CLIProxy。这次不经 DSH 会话，没有单独的合规清洗。"
-      : "未配齐 DSH。出字经 CLIProxy，没有单独的合规清洗。",
+      ? "出字经 OpenAI 兼容接口。这次不经 DSH 会话，没有单独的合规清洗。"
+      : "未配齐 DSH。出字经 OpenAI 兼容接口，没有单独的合规清洗。",
   };
 }
 

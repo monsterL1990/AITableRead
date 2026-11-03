@@ -16,13 +16,13 @@ Licensed under the [MIT License](LICENSE). Copyright 2026 monsterL1990.
 
 Each step can be regenerated. Reader reviews are optional. A structural check can compare the draft with the outline and the word-count target. Characters in the story are required to be adults.
 
-With no model configured, the buttons still run and return editable Chinese placeholder text so you can walk the three steps.
+With no model configured, the desk still opens. A banner asks you to configure an API. The writing buttons return editable Chinese placeholder text so you can walk the three steps. Empty keys do not crash the UI.
 
 ## Configure it
 
-Copy `.env.example` to `.env.local`. Do not commit that file.
+The one-click scripts copy `.env.example` to `.env` when `.env` is missing. For a manual start, copy it yourself. Do not commit that file. `npm run dev` also reads `.env.local` if you create one; that file overrides `.env`.
 
-The default way to get real prose is a **custom OpenAI-compatible API**:
+The recommended way to get real prose is a **custom OpenAI-compatible API**:
 
 ```bash
 OPENAI_BASE_URL=https://api.example.com/v1
@@ -30,22 +30,49 @@ OPENAI_API_KEY=your-key
 OPENAI_MODEL=your-model
 ```
 
-Leave the URL and key empty and the app stays in demo mode. The key stays on the server. You can also save a base URL, key, and model in Settings; that copy lives in `data/store.json`, which is gitignored.
+You can put the same three values in Settings under **自定义 OpenAI 兼容接口** and choose **保存并用于出字**. That copy lives in `data/store.json`, which is gitignored. The key stays on this machine.
+
+Leave the URL and key empty and the app stays up. The home page says **请先配置 API** and links to Settings.
 
 **Optional, later:** a self-hosted [DSH](https://github.com/deepseek-ai/DeepSeek-Harness) (DeepSeek Harness) instance. Set `DSH_BASE_URL`, `DSH_TOKEN`, and `DSH_SESSION_ID` only if you run one. Plugins on that instance are your business. WeiDu does not require a purge plugin, does not ship one, and does not install one for you. If the template session has an agent preset, a new turn copies that preset. That is all.
 
+If those three `DSH_*` values are set and you have not picked a route in Settings, generation still prefers DSH. That is not the local default. Leave them empty, or pick **OpenAI 兼容接口（.env，推荐）** in Settings.
+
 There is no hosted WeiDu service in this repository, and the defaults do not point at one.
 
-## Run locally
+## Windows, one double-click
+
+1. Install [Node.js LTS](https://nodejs.org/) (20.9 or newer; 22, 24, or 26). The installer includes npm.
+2. Double-click `start.bat`.
+
+`start.bat` runs `start.ps1`. Together they:
+
+- stop with a clear message if Node.js is missing or is not a supported LTS release (the window stays open)
+- create `.env` from `.env.example` when `.env` is missing
+- run `npm install` when `node_modules` is missing or older than `package-lock.json`
+- start the same server as `npm run dev`
+- open http://127.0.0.1:4721 in your browser once that port accepts connections
+
+Sign in as `local`. A fresh `.env` uses the password `replace-with-a-password` until you change `APP_PASSWORD`. If you clear both password variables in development, the password is `changeme`. That fallback is disabled when `NODE_ENV=production`.
+
+`start.ps1` is the same steps if you prefer PowerShell. Set `WEIDU_NO_BROWSER=1` to skip opening a browser.
+
+## macOS and Linux
 
 ```bash
+chmod +x start.sh   # once
+./start.sh
+```
+
+Or, without the script:
+
+```bash
+cp .env.example .env   # skip if .env already exists
 npm install
 npm run dev
 ```
 
 Open [http://127.0.0.1:4721](http://127.0.0.1:4721). Use that address. The dev server allows `localhost` and `127.0.0.1`.
-
-Sign in as `local`. Set `APP_PASSWORD` in `.env.local`. If you leave the password unset in development, the password is `changeme`. That fallback is disabled when `NODE_ENV=production`. Set `APP_SESSION_SECRET` to a long random string before anyone else can open the app.
 
 ```bash
 npm test
@@ -54,7 +81,18 @@ npm run build
 npm run start
 ```
 
-`npm run start` also listens on port 4721.
+`npm run dev` and `npm run start` listen on **127.0.0.1** port **4721**. Next.js itself defaults to `0.0.0.0`; these scripts pass `--hostname` so a normal launch does not. Set `WEIDU_HOST=0.0.0.0` in the environment, `.env.local`, or `.env` only when you mean to accept connections from other machines. A shell value wins over the files. `PORT` changes the port. `HOSTNAME` is not the listen address.
+
+Check the bind while the app is running:
+
+```bash
+# Windows
+netstat -ano | findstr 4721
+# macOS or Linux
+ss -ltnp | grep 4721
+```
+
+You should see `127.0.0.1:4721`, not `0.0.0.0:4721`.
 
 Docker, still one machine, with the same variables from a `.env` file next to the compose file:
 
@@ -63,7 +101,18 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-The container listens on port 3000 and the compose file publishes it on 4721. Manuscripts are in the `weidu-data` volume (`/app/data/store.json`).
+The container listens on `0.0.0.0` port 3000 and the compose file publishes it on 4721. That bind is explicit in `docker-entrypoint.sh` so the published port can reach the process. It is not the local default. Manuscripts are in the `weidu-data` volume (`/app/data/store.json`).
+
+## Data and reset
+
+Manuscripts, readers, prompts, settings, saved API keys, and extra accounts are files under `./data`:
+
+- `data/store.json` — manuscripts and the saved custom API
+- `data/accounts.json` — accounts other than the `local` login password (that password is `APP_PASSWORD`)
+
+`./data` is gitignored. The app creates the directory on the first write. A missing folder does not crash startup.
+
+To reset this machine's desk: stop WeiDu, delete the `data` folder, and start again. The next launch creates an empty store. Deleting `data` does not change `.env`.
 
 ## Single user
 
@@ -71,18 +120,35 @@ Use the `local` account. Manuscripts, readers, prompts, and settings for that lo
 
 An Accounts page and a few preset account types are still in the code from an earlier multi-user desk. They are not the setup this README describes. Do not treat preset Grok or preset DeepSeek accounts as the way to install WeiDu. Those paths expect a shared DSH and are the wrong default for a local copy.
 
-The settings screen still labels the environment OpenAI-compatible route "CLIProxy". For this release, that label means "the `OPENAI_BASE_URL` you set". It is not a bundled proxy.
+The environment OpenAI route used to be labeled "CLIProxy" in Settings. That label meant `OPENAI_BASE_URL`. It is not a bundled proxy. Settings now calls it **OpenAI 兼容接口（.env，推荐）**.
 
-## P1
+## How to verify
 
-Still to do, and intentionally not in this tree:
+On a machine with Node.js LTS:
+
+```bash
+npm install
+npm test
+npm run dev
+```
+
+In another terminal, `ss -ltnp | grep 4721` (or `netstat -ano | findstr 4721` on Windows) should show `127.0.0.1:4721`. Open http://127.0.0.1:4721, sign in as `local`, and confirm the home page shows **请先配置 API** when `OPENAI_BASE_URL` and `OPENAI_API_KEY` are empty. `GET /api/config` returns `demoMode: true` and the process keeps running.
+
+On Windows, double-click `start.bat` instead of `npm run dev`. It should install dependencies if needed, create `.env` if needed, and open the same URL. Rename `node` out of `PATH` (or run the script on a machine without Node) and the window should say Node.js LTS is not installed, then wait so you can read it.
+
+`WEIDU_HOST=0.0.0.0 npm run dev` is the explicit override and should show `0.0.0.0:4721`.
+
+## Still later
+
+Not in this change:
 
 - Make the local single user the only account path, and remove preset account types.
-- Rename the "CLIProxy" route so the OpenAI-compatible API is the obvious default even when DSH is also configured. Today, if `DSH_*` is fully set and you have not picked a route, generation prefers DSH.
-- A small local launcher, a DSH setup wizard, and interface translations.
+- When `DSH_*` is fully set and no route is saved, generation still prefers DSH. The recommended local path is to leave `DSH_*` empty.
+- A DSH setup wizard and interface translations.
 
 ## Layout
 
 - App routes live in `app/`. Generation and storage live in `lib/`.
+- `scripts/serve.mjs` starts Next.js on the loopback address above.
 - In-app docs are Chinese markdown in `content/`, with screenshots in `public/docs-assets/`.
 - Tests are `npm test` (`tsx --test tests/*.test.ts`).
