@@ -1,0 +1,31 @@
+# Single machine. Compose reads a local .env for the ${...} values below.
+# Copy .env.example to .env and replace the password placeholders.
+# This file does not join a private network and does not set a model host.
+
+services:
+  weidu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: weidu:local
+    container_name: weidu
+    restart: unless-stopped
+    environment:
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+      APP_SESSION_SECRET: ${APP_SESSION_SECRET:-}
+      DSH_BASE_URL: ${DSH_BASE_URL:-}
+      DSH_TOKEN: ${DSH_TOKEN:-}
+      DSH_SESSION_ID: ${DSH_SESSION_ID:-}
+      DSH_TIMEOUT_MS: ${DSH_TIMEOUT_MS:-}
+      GAOJIAN_DATA_FILE: /app/data/store.json
+    ports:
+      - "4721:3000"
+    volumes:
+      - weidu-data:/app/data
+
+volumes:
+  weidu-data:

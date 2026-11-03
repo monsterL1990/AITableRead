@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+data
+out
+coverage
+.vercel
+
+# Never send local secrets into the build context.
+.env
+.env.*
+!.env.example
+
+npm-debug.log*
+*.tsbuildinfo
+.DS_Store
