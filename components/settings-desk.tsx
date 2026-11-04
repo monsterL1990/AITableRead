@@ -10,15 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { settingsSections } from "@/lib/account-policy";
 import { DEEPSEEK_MODEL_SUGGESTIONS, DEEPSEEK_OPENAI_BASE_URL, DEEPSEEK_PRESET_MODEL } from "@/lib/custom-api";
-import { DSH_PLUGIN_NOTE } from "@/lib/dsh-setup";
+import { DSH_PLUGIN_NOTE, dshReconnectNotice, dshSavedSummary } from "@/lib/dsh-setup";
 import { routeMark } from "@/lib/format";
 import type { DshCatalogOption, PreferredTextRoute, SettingsResponse, SettingsVisibility } from "@/lib/types";
 
-function dshRouteDetail(configured: boolean): string {
+export function dshRouteDetail(configured: boolean): string {
   if (configured) {
-    return "更慢。轮询你自己的 DSH 会话。插件在那台 DSH 上由你安装，围读不要求 purge。不是本机的默认路径。";
+    return "更慢。轮询你自己的 DSH。插件在那台 DSH 上由你安装，围读不要求 purge。不是本机的默认路径。";
   }
-  return "还没连上。选这条会打开连接向导：粘贴浏览器地址和令牌，再选会话和模型。";
+  return "还没连上。选这条会打开连接向导：粘贴浏览器地址和令牌。围读会自己建专用会话，模型目录能拉到时再选。";
 }
 
 function savedRouteLabel(next: PreferredTextRoute): string {
@@ -64,6 +64,7 @@ export function SettingsDesk({
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,6 +155,36 @@ export function SettingsDesk({
     }
   }
 
+  async function reconnectDsh() {
+    if (!view || saving || savingApi || reconnecting) return;
+    setReconnecting(true);
+    try {
+      const response = await fetch("/api/settings/dsh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "reconnect" }),
+      });
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      const data = (await response.json().catch(() => ({}))) as SettingsResponse & { error?: string; replaced?: boolean };
+      if (!response.ok || !data.textRoute || !data.preferredTextRoute || !data.customApi || !data.dshCatalog) {
+        toast.error(data.error || "没能重新连接 DSH。");
+        return;
+      }
+      setView(data);
+      setBaseUrl(data.customApi.baseUrl);
+      setModel(data.customApi.model);
+      setApiKey("");
+      toast.success(dshReconnectNotice(data.replaced === true));
+    } catch {
+      toast.error("没能重新连接 DSH。");
+    } finally {
+      setReconnecting(false);
+    }
+  }
+
   function focusCustomApi() {
     setWizardOpen(false);
     document.getElementById("custom-api-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -197,7 +228,7 @@ export function SettingsDesk({
   }
 
   const selected = pending ?? view?.preferredTextRoute;
-  const busy = saving || savingApi;
+  const busy = saving || savingApi || reconnecting;
 
   return (
     <Shell>
@@ -278,18 +309,26 @@ export function SettingsDesk({
                   <span className="font-medium">经 DSH（可选）</span>
                   <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshRouteDetail(view.dshConfigured)}</span>
                   {view.dshConnection?.configured ? (
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                      已保存 {view.dshConnection.baseUrl}，会话 {view.dshConnection.sessionId}
-                      {view.dshConnection.tokenMask ? `，令牌 ${view.dshConnection.tokenMask}` : ""}。
-                    </span>
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshSavedSummary(view.dshConnection)}</span>
                   ) : null}
                 </span>
               </label>
             </fieldset>
-            <div className="mt-4">
-              <Button type="button" variant="outline" disabled={busy} onClick={() => setWizardOpen(true)}>
-                {view.dshConfigured ? "重新连接 DSH" : "连接 DSH"}
-              </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {view.dshConfigured ? (
+                <>
+                  <Button type="button" variant="outline" disabled={busy} onClick={() => void reconnectDsh()}>
+                    {reconnecting ? "正在重新连接…" : "重新连接 DSH"}
+                  </Button>
+                  <Button type="button" variant="outline" disabled={busy} onClick={() => setWizardOpen(true)}>
+                    更改地址或令牌
+                  </Button>
+                </>
+              ) : (
+                <Button type="button" variant="outline" disabled={busy} onClick={() => setWizardOpen(true)}>
+                  连接 DSH
+                </Button>
+              )}
             </div>
             {wizardOpen ? (
               <div className="mt-4">

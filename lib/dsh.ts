@@ -710,6 +710,101 @@ export async function inspectDshConnection(
   return { sessions, catalog };
 }
 
+export type DshProvisionResult = DshInspectResult & {
+  dedicatedSession: DshSessionChoice;
+};
+
+export type DshEnsureResult = {
+  sessionId: string;
+  replaced: boolean;
+  catalog: DshCatalogView;
+};
+
+const PROVISION_FAILURE = "连上了，但没能新建围读专用会话。不会改用已有会话。";
+const ENSURE_FAILURE = "原来的会话不在了，也没能新建围读专用会话。不会改用别的已有会话。";
+
+type DeskConnection = { baseUrl: string; token: string; basicUser?: string; basicPassword?: string };
+
+type OpenDesk = {
+  config: DshConfig;
+  fetchImpl: FetchLike;
+  cookie: string;
+  sessions: DshSessionChoice[];
+  catalog: DshCatalogView;
+};
+
+async function openDshDesk(input: DeskConnection, deps: { fetchImpl?: FetchLike; signal?: AbortSignal }): Promise<OpenDesk> {
+  const baseUrl = input.baseUrl.trim().replace(/\/+$/, "");
+  const token = input.token.trim();
+  if (!baseUrl || !token) throw new Error("要填写 DSH 地址和令牌。");
+  const config: DshConfig = {
+    baseUrl,
+    token,
+    sessionId: "",
+    timeoutMs: 8_000,
+    basicUser: input.basicUser?.trim() ?? "",
+    basicPassword: input.basicPassword ?? "",
+    configured: true,
+    missing: [],
+  };
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const cookie = await connect(fetchImpl, config, deps.signal, true);
+  const sessions = sessionChoices(await rpc(fetchImpl, config, cookie, "session/list", { _request: {} }, deps.signal));
+  let catalog: DshCatalogView;
+  try {
+    catalog = catalogFromValue(await rpc(fetchImpl, config, cookie, "session/modelCatalog", {}, deps.signal));
+  } catch (error) {
+    rethrowAbort(error);
+    const message = error instanceof Error ? error.message : "模型目录没拉下来。";
+    catalog = emptyDshCatalog(message);
+  }
+  return { config, fetchImpl, cookie, sessions, catalog };
+}
+
+/** 新建一个不带 agentPreset 的会话。交回的 id 若已在列表里，当成没有新建。错误文案不带会话 id。 */
+async function mintDedicatedSession(
+  desk: OpenDesk,
+  signal: AbortSignal | undefined,
+  failure: string,
+): Promise<DshSessionChoice> {
+  const created = await rpc(desk.fetchImpl, desk.config, desk.cookie, "session/create", { request: {} }, signal);
+  const sessionId = createdSessionId(created);
+  if (!sessionId || desk.sessions.some((item) => item.sessionId === sessionId)) throw new Error(failure);
+  return { sessionId, title: "围读", running: false };
+}
+
+/**
+ * 连接向导用。列已有会话和模型目录之后，另建一个不带 agentPreset 的会话给围读保存。
+ * 不从已有会话里挑一个。目录拉不下来也不挡新建。
+ */
+export async function provisionDshDesk(
+  input: DeskConnection,
+  deps: { fetchImpl?: FetchLike; signal?: AbortSignal } = {},
+): Promise<DshProvisionResult> {
+  const desk = await openDshDesk(input, deps);
+  const dedicatedSession = await mintDedicatedSession(desk, deps.signal, PROVISION_FAILURE);
+  const sessions = [dedicatedSession, ...desk.sessions];
+  return { sessions, catalog: desk.catalog, dedicatedSession };
+}
+
+/**
+ * 重新连接用。已保存的会话还在列表里就沿用；不在就新建一个不带 agentPreset 的会话。
+ * 不改用别的已有会话。目录失败不挡。返回值给服务端写回稿库，页面上不展示会话 id。
+ */
+export async function ensureDshDeskSession(
+  input: DeskConnection,
+  sessionId: string,
+  deps: { fetchImpl?: FetchLike; signal?: AbortSignal } = {},
+): Promise<DshEnsureResult> {
+  const desk = await openDshDesk(input, deps);
+  const wanted = sessionId.trim();
+  if (wanted && desk.sessions.some((item) => item.sessionId === wanted)) {
+    return { sessionId: wanted, replaced: false, catalog: desk.catalog };
+  }
+  const dedicated = await mintDedicatedSession(desk, deps.signal, ENSURE_FAILURE);
+  return { sessionId: dedicated.sessionId, replaced: true, catalog: desk.catalog };
+}
+
 /** 实拉 session/modelCatalog。调用方负责把值收成选项；这里不写死任何模型。 */
 export async function readDshModelCatalog(deps: Pick<Deps, "fetchImpl" | "env" | "signal"> = {}): Promise<unknown> {
   const config = getDshConfig(deps.env);

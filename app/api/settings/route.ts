@@ -102,7 +102,7 @@ export async function PATCH(request: Request) {
       return errorJson(message, 400);
     }
     if (!inspected.sessions.some((item) => item.sessionId === parsed.connection.sessionId)) {
-      return errorJson("这台 DSH 上没有这个会话。请重新测试连接后再选。", 400);
+      return errorJson("这台 DSH 上没有这个会话。请重新测试连接。", 400);
     }
     dshConnection = parsed.connection;
     inspectedCatalog = inspected.catalog;
