@@ -12,6 +12,7 @@ type Me = {
   display: string;
   type: AccountType;
   settingsVisibility: SettingsVisibility;
+  authEnabled?: boolean;
 };
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -40,6 +41,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [router]);
 
   const sections = settingsSections(me?.settingsVisibility ?? "hidden");
+  const accountsOn = me?.authEnabled === true;
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-30 border-b border-border/80 bg-paper/90 backdrop-blur">
@@ -56,7 +58,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <Button variant={pathname === "/prompts" ? "secondary" : "ghost"} asChild>
               <Link href="/prompts">提示词</Link>
             </Button>
-            {me?.type === "owner" ? (
+            {accountsOn && me?.type === "owner" ? (
               <Button variant={pathname === "/admin" ? "secondary" : "ghost"} asChild>
                 <Link href="/admin">账号</Link>
               </Button>
@@ -69,17 +71,19 @@ export function Shell({ children }: { children: ReactNode }) {
             <Button variant="ghost" asChild>
               <Link href="/docs">说明</Link>
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                void fetch("/api/auth/logout", { method: "POST" }).finally(() => {
-                  router.replace("/login");
-                  router.refresh();
-                });
-              }}
-            >
-              退出
-            </Button>
+            {accountsOn ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  void fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+                    router.replace("/login");
+                    router.refresh();
+                  });
+                }}
+              >
+                退出
+              </Button>
+            ) : null}
           </nav>
         </div>
       </header>

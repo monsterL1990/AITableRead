@@ -25,7 +25,7 @@ if [[ ! -f .env ]]; then
   cp .env.example .env
   echo "Created .env from .env.example."
   echo "Empty OPENAI_BASE_URL and OPENAI_API_KEY are fine. The page will ask you to configure an API."
-  echo "Sign in as local. The password in that file is replace-with-a-password until you change APP_PASSWORD."
+  echo "No login on this machine. Set WEIDU_AUTH=on in .env only if you want APP_PASSWORD."
 fi
 
 need_install=0

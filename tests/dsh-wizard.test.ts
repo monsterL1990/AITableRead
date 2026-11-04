@@ -3,16 +3,47 @@ import test from "node:test";
 import { applyAccountTextPolicy, accountSettingsFields, publicConfigForAccount } from "../lib/account-policy";
 import { inspectDshConnection } from "../lib/dsh";
 import {
+  DEFAULT_DSH_PROBE_PORTS,
+  DSH_TOKEN_HELP,
   mergeDshEnv,
   parseDshBrowserUrl,
   parseDshConnectionPatch,
   probeLocalDshPorts,
+  probePortsFromEnv,
+  readDshTokenInput,
   toPublicDshConnection,
   emptyDshConnection,
 } from "../lib/dsh-setup";
 import { EMPTY_CUSTOM_API } from "../lib/custom-api";
 
 const extras = { devPasswordHint: false, authConfigured: true };
+
+test("the launch token is not a model key, and a dsh web url yields token plus origin", () => {
+  assert.match(DSH_TOKEN_HELP, /不是模型的 API Key/);
+  assert.match(DSH_TOKEN_HELP, /dsh web/);
+  assert.match(DSH_TOKEN_HELP, /3080/);
+  assert.deepEqual(readDshTokenInput("launch-token"), { token: "launch-token", baseUrl: "" });
+  assert.deepEqual(readDshTokenInput("http://127.0.0.1:3080/?token=abc-def"), {
+    token: "abc-def",
+    baseUrl: "http://127.0.0.1:3080",
+  });
+  assert.deepEqual(readDshTokenInput("dsh web: http://127.0.0.1:3080/?token=abc-def"), {
+    token: "abc-def",
+    baseUrl: "http://127.0.0.1:3080",
+  });
+  const saved = parseDshConnectionPatch(
+    { baseUrl: "http://127.0.0.1:3080/ui", token: "http://127.0.0.1:3080/?token=abc-def", sessionId: "sess-1" },
+    emptyDshConnection(),
+  );
+  assert.equal(saved.ok, true);
+  if (saved.ok) assert.equal(saved.connection.token, "abc-def");
+});
+
+test("default probe ports start at dsh web's 3080", () => {
+  assert.deepEqual(DEFAULT_DSH_PROBE_PORTS, [3080, 3081, 3099]);
+  assert.deepEqual(probePortsFromEnv({ DSH_PROBE_PORTS: "" }), [3080, 3081, 3099]);
+  assert.deepEqual(probePortsFromEnv({ DSH_PROBE_PORTS: "3099" }), [3099]);
+});
 
 test("browser url becomes an origin and keeps basic auth out of the base url", () => {
   const plain = parseDshBrowserUrl("http://127.0.0.1:3099/ui/sessions?x=1#top");

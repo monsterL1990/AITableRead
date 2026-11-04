@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DSH_PLUGIN_NOTE, DEFAULT_DSH_PROBE_PORTS, parseDshBrowserUrl } from "@/lib/dsh-setup";
+import { DSH_PLUGIN_NOTE, DSH_TOKEN_HELP, DEFAULT_DSH_PROBE_PORTS, parseDshBrowserUrl, readDshTokenInput } from "@/lib/dsh-setup";
 import type { DshCatalogView, DshSessionChoice, PublicDshConnection, SettingsResponse } from "@/lib/types";
 
 type ProbeRow = { port: number; url: string; ok: boolean; status?: number; error?: string };
@@ -85,14 +85,19 @@ export function DshWizard({
   }
 
   async function testConnection() {
-    if (!parsed.ok) {
-      setError(parsed.error);
+    const read = readDshTokenInput(token);
+    const urlInput = read.baseUrl || browserUrl;
+    const nextParsed = parseDshBrowserUrl(urlInput);
+    if (!nextParsed.ok) {
+      setError(nextParsed.error);
       return;
     }
-    if (!token.trim()) {
+    if (!read.token.trim()) {
       setError("要填写 DSH 令牌。");
       return;
     }
+    if (read.baseUrl) setBrowserUrl(read.baseUrl);
+    if (read.token !== token) setToken(read.token);
     setTesting(true);
     setError("");
     setTestedKey("");
@@ -104,8 +109,8 @@ export function DshWizard({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "test",
-          baseUrl: parsed.baseUrl,
-          token,
+          baseUrl: nextParsed.baseUrl,
+          token: read.token,
           basicUser,
           basicPassword,
         }),
@@ -122,7 +127,7 @@ export function DshWizard({
       }
       setSessions(data.sessions);
       setCatalog(data.catalog ?? null);
-      setTestedKey(credentialKey);
+      setTestedKey(`${nextParsed.baseUrl}\n${read.token}\n${basicUser}\n${basicPassword}`);
       if (!data.sessions.some((item) => item.sessionId === sessionId)) {
         setSessionId(data.sessions[0]?.sessionId ?? "");
       }
@@ -240,7 +245,7 @@ export function DshWizard({
               setBrowserUrl(event.target.value);
               setTestedKey("");
             }}
-            placeholder="http://127.0.0.1:3099"
+            placeholder="http://127.0.0.1:3080"
             autoComplete="off"
             spellCheck={false}
             disabled={busy}
@@ -316,7 +321,7 @@ export function DshWizard({
 
       <StepCard n={3} title="令牌和可选的 Basic Auth" active={step === 3} done={step > 3 && tested} onEdit={() => setStep(3)}>
         <p className="text-sm leading-6 text-muted-foreground">
-          填这套 DSH web 的启动令牌。如果前面还有 Basic Auth，用户名和密码分开填，没有就留空。然后测试连接：列出会话，能拉到模型目录也会一并带上。
+          如果前面还有 Basic Auth，用户名和密码分开填，没有就留空。然后测试连接：列出会话，能拉到模型目录也会一并带上。
         </p>
         <div className="mt-3 space-y-3">
           <div className="space-y-2">
@@ -326,13 +331,20 @@ export function DshWizard({
               type="password"
               value={token}
               onChange={(event) => {
-                setToken(event.target.value);
+                const read = readDshTokenInput(event.target.value);
+                if (read.baseUrl) {
+                  setBrowserUrl(read.baseUrl);
+                  setToken(read.token);
+                } else {
+                  setToken(event.target.value);
+                }
                 setTestedKey("");
               }}
-              placeholder={initial?.tokenMask ? `已保存 ${initial.tokenMask}，重连请再贴一次` : "粘贴启动令牌"}
+              placeholder={initial?.tokenMask ? `已保存 ${initial.tokenMask}，重连请再贴一次` : "粘贴启动令牌，或整段 dsh web 地址"}
               autoComplete="off"
               disabled={busy}
             />
+            <p className="text-sm leading-6 text-muted-foreground">{DSH_TOKEN_HELP}</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="dsh-basic-user">Basic Auth 用户名（可选）</Label>

@@ -1,13 +1,25 @@
 import { resolveSessionAccount, type AuthUser } from "./accounts";
+import { authEnabled } from "./auth-mode";
 import { getSession } from "./auth";
+import { LOCAL_USER_ID } from "./types";
 
 export type { AuthUser };
+
+export const AUTH_OFF_MESSAGE = "账号系统没开。要启用登录和账号，设置 WEIDU_AUTH=on。";
 
 export function errorJson(message: string, status: number, extra?: Record<string, unknown>) {
   return Response.json({ error: message, ...extra }, { status });
 }
 
+const LOCAL_OWNER: AuthUser = {
+  uid: LOCAL_USER_ID,
+  type: "owner",
+  display: "站长",
+  credentialVersion: 0,
+};
+
 export async function requireUser(): Promise<AuthUser | Response> {
+  if (!authEnabled()) return { ...LOCAL_OWNER };
   const session = await getSession();
   if (!session) return errorJson("未登录", 401);
   const account = await resolveSessionAccount(session.uid, session.credentialVersion);
@@ -16,6 +28,7 @@ export async function requireUser(): Promise<AuthUser | Response> {
 }
 
 export async function requireOwner(): Promise<AuthUser | Response> {
+  if (!authEnabled()) return errorJson(AUTH_OFF_MESSAGE, 403);
   const user = await requireUser();
   if (isResponse(user)) return user;
   if (user.type !== "owner") return errorJson("只有站长可以管理账号。", 403);
