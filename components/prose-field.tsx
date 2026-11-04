@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ManuscriptView } from "@/components/manuscript-view";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/components/locale-provider";
 import { countChars } from "@/lib/format";
 
 export function ProseField({
@@ -25,6 +26,7 @@ export function ProseField({
   placeholder?: string;
   tall?: boolean;
 }) {
+  const { t } = useI18n();
   const [preview, setPreview] = useState(false);
   const height = tall ? "h-[42vh] min-h-72" : "h-48 min-h-40";
   return (
@@ -35,15 +37,15 @@ export function ProseField({
           {hint ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{hint}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-3 pt-0.5 text-xs text-muted-foreground">
-          <span>{countChars(value)} 字</span>
+          <span>{t("field.chars", { count: countChars(value) })}</span>
           <button type="button" className="underline-offset-2 hover:underline" onClick={() => setPreview((current) => !current)}>
-            {preview ? "编辑" : "预览"}
+            {preview ? t("common.edit") : t("common.preview")}
           </button>
         </div>
       </div>
       {preview ? (
         <div className={`sheet overflow-auto rounded-lg border border-border px-4 py-3 ${height}`}>
-          <ManuscriptView text={value} />
+          <ManuscriptView text={value} empty={t("field.empty")} />
         </div>
       ) : (
         <Textarea

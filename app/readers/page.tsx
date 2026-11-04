@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
 import { ReaderDesk } from "@/components/reader-desk";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "读者" };
+export function generateMetadata() {
+  return pageMetadata("meta.readers");
+}
 
 export default function ReadersPage() {
   return <ReaderDesk />;

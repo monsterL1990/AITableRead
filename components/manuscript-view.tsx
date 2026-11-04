@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
-export function ManuscriptView({ text }: { text: string }) {
+export function ManuscriptView({ text, empty = "这里还空着。" }: { text: string; empty?: string }) {
   if (!text.trim()) {
-    return <p className="text-sm text-muted-foreground">这里还空着。</p>;
+    return <p className="text-sm text-muted-foreground">{empty}</p>;
   }
   return (
     <div className="prose-sheet space-y-2">

@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
 import { DocsArticle } from "@/components/docs-article";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "API配置" };
+export function generateMetadata() {
+  return pageMetadata("meta.docsApi");
+}
 
 export default function DocsApiPage() {
   return <DocsArticle slug="api" />;

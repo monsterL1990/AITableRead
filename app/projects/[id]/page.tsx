@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
 import { PipelineWorkspace } from "@/components/pipeline-workspace";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "稿件" };
+export function generateMetadata() {
+  return pageMetadata("meta.project");
+}
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

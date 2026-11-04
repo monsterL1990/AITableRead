@@ -1,6 +1,8 @@
 "use client";
 
+import { useI18n } from "@/components/locale-provider";
 import { STEPS } from "@/lib/pipeline";
+import type { MessageId } from "@/lib/i18n/catalog";
 import type { Project, StepId } from "@/lib/types";
 
 export function StepTimeline({
@@ -12,14 +14,16 @@ export function StepTimeline({
   viewStep: StepId;
   onView: (step: StepId) => void;
 }) {
+  const { t } = useI18n();
   return (
     <ol className="flex gap-2 overflow-x-auto pb-1">
       {STEPS.map((step) => {
         const locked = step.id > project.currentStep;
         const viewing = step.id === viewStep;
         const done = project.confirmed[step.id];
+        const state = done ? t("step.confirmed") : step.id === project.currentStep ? t("step.current") : t("step.locked");
         return (
-          <li key={step.id} className="min-w-[9.5rem] flex-1">
+          <li key={step.id} className="min-w-44 flex-1">
             <button
               type="button"
               disabled={locked}
@@ -33,9 +37,9 @@ export function StepTimeline({
                 <span className={`inline-flex size-5 items-center justify-center border text-[11px] ${viewing ? "border-primary-foreground/40" : "border-current"}`}>
                   {step.id}
                 </span>
-                {done ? "已确认" : step.id === project.currentStep ? "当前" : "未到"}
+                {state}
               </span>
-              <span className="text-sm font-medium">{step.title}</span>
+              <span className="text-sm font-medium whitespace-normal">{t(`step.${step.id}.title` as MessageId)}</span>
             </button>
           </li>
         );

@@ -4,6 +4,7 @@ import { normalizeCustomApi } from "./custom-api";
 import { emptyDshConnection, normalizeStoredDsh } from "./dsh-setup";
 import { parsePendingJob } from "./pending-job";
 import { appendLog, createProjectRecord, defaultReaders, isStartFrom, isStepId, pushVersion, reviewTriageOf } from "./pipeline";
+import type { Locale } from "./i18n/locale";
 import type { CustomApiConfig, DshModelRef, PreferredTextRoute, Project, PromptKey, ReaderProfile, StartFrom, StepId, StoredDshConnection, TextVersion } from "./types";
 import { LIMITS, LOCAL_USER_ID } from "./types";
 
@@ -28,6 +29,8 @@ type Workspace = {
 
 type StoreData = {
   version: 3;
+  /** Unset until the user picks a language in the switch. */
+  locale?: Locale;
   workspaces: Record<string, Workspace>;
   projects: Project[];
 };
@@ -74,6 +77,10 @@ function emptyWorkspace(): Workspace {
 
 function emptyStore(): StoreData {
   return { version: 3, workspaces: { [LOCAL_USER_ID]: emptyWorkspace() }, projects: [] };
+}
+
+function readLocale(value: unknown): Locale | undefined {
+  return value === "zh" || value === "en" ? value : undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -337,7 +344,8 @@ function normalize(value: unknown): StoreData {
       settings: raw.settings,
     });
   }
-  return { version: 3, workspaces, projects };
+  const locale = readLocale(raw.locale);
+  return { version: 3, ...(locale ? { locale } : {}), workspaces, projects };
 }
 
 function ensureWorkspace(store: StoreData, uid: string): Workspace {
@@ -519,6 +527,19 @@ export async function updateReader(
     if (typeof patch.blocked === "boolean") reader.blocked = patch.blocked;
     await write(store);
     return structuredClone(reader);
+  });
+}
+
+export async function getUiLocale(): Promise<Locale | null> {
+  return locked(async () => (await read()).locale ?? null);
+}
+
+export async function setUiLocale(locale: Locale): Promise<Locale> {
+  return locked(async () => {
+    const store = await read();
+    store.locale = locale;
+    await write(store);
+    return locale;
   });
 }
 

@@ -1,14 +1,22 @@
 import { resolveSessionAccount, type AuthUser } from "./accounts";
 import { authEnabled } from "./auth-mode";
 import { getSession } from "./auth";
+import { resolveRequestLocale } from "./i18n/request";
+import { localize } from "./i18n/translate";
 import { LOCAL_USER_ID } from "./types";
 
 export type { AuthUser };
 
 export const AUTH_OFF_MESSAGE = "账号系统没开。要启用登录和账号，设置 WEIDU_AUTH=on。";
 
-export function errorJson(message: string, status: number, extra?: Record<string, unknown>) {
-  return Response.json({ error: message, ...extra }, { status });
+export async function errorJson(message: string, status: number, extra?: Record<string, unknown>) {
+  let text = message;
+  try {
+    text = localize(await resolveRequestLocale(), message);
+  } catch {
+    text = message;
+  }
+  return Response.json({ error: text, ...extra }, { status });
 }
 
 const LOCAL_OWNER: AuthUser = {

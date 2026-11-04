@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useI18n } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +29,7 @@ export function ReaderTriageControls({
   onDiscuss: () => void;
 }) {
   const triage = reviewTriageOf(note.triage);
+  const { t, show } = useI18n();
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5" data-reader-triage={note.readerId}>
       <Button
@@ -38,7 +40,7 @@ export function ReaderTriageControls({
         aria-pressed={triage === "adopted"}
         onClick={() => onTriage(note.id, triage === "adopted" ? "unset" : "adopted")}
       >
-        采纳
+        {t("reader.adopt")}
       </Button>
       <Button
         type="button"
@@ -48,12 +50,12 @@ export function ReaderTriageControls({
         aria-pressed={triage === "ignored"}
         onClick={() => onTriage(note.id, triage === "ignored" ? "unset" : "ignored")}
       >
-        忽略
+        {t("reader.ignore")}
       </Button>
       <Button type="button" size="xs" variant="outline" disabled={disabled} aria-haspopup="dialog" onClick={onDiscuss}>
-        讨论
+        {t("reader.discuss")}
       </Button>
-      <span className="text-xs text-muted-foreground">{reviewTriageLabel(triage)}</span>
+      <span className="text-xs text-muted-foreground">{show(reviewTriageLabel(triage))}</span>
     </div>
   );
 }
@@ -117,6 +119,7 @@ export function ReaderDiscussForm({
   const [draft, setDraft] = useState(note.text);
   const [talk, setTalk] = useState(note.discussion);
   const [saving, setSaving] = useState(false);
+  const { t } = useI18n();
   const locked = busy || saving || amending;
 
   async function save(announce: boolean): Promise<boolean> {
@@ -124,7 +127,7 @@ export function ReaderDiscussForm({
     try {
       const changed = draft.trim() !== note.text.trim();
       const ok = await onSave(note.id, draft, talk);
-      if (ok && announce) toast.success(changed ? "这条意见已保存，请再点采纳。" : "这条意见已保存。");
+      if (ok && announce) toast.success(changed ? t("reader.savedRetriage") : t("reader.saved"));
       return ok;
     } finally {
       setSaving(false);
@@ -134,15 +137,13 @@ export function ReaderDiscussForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>讨论这条意见</DialogTitle>
-        <DialogDescription>
-          {note.readerName}的这条意见。保存后写进这条意见；让 AI 改写会回到未定。只有采纳的才会进入「按已有读者意见改一版」。
-        </DialogDescription>
+        <DialogTitle>{t("reader.discussTitle")}</DialogTitle>
+        <DialogDescription>{t("reader.discussBody", { name: note.readerName })}</DialogDescription>
       </DialogHeader>
       <div className="space-y-3">
         <div className="space-y-2">
           <label htmlFor={`discuss-opinion-${note.id}`} className="text-sm font-medium">
-            这条意见
+            {t("reader.thisNote")}
           </label>
           <Textarea
             id={`discuss-opinion-${note.id}`}
@@ -154,13 +155,13 @@ export function ReaderDiscussForm({
         </div>
         <div className="space-y-2">
           <label htmlFor={`discuss-talk-${note.id}`} className="text-sm font-medium">
-            你想怎么改
+            {t("reader.how")}
           </label>
           <Textarea
             id={`discuss-talk-${note.id}`}
             value={talk}
             readOnly={locked}
-            placeholder="例如：第四拍别删，把动机写成一个具体动作。"
+            placeholder={t("reader.howPlaceholder")}
             onChange={(event) => setTalk(event.target.value)}
             className="min-h-24 bg-paper"
           />
@@ -168,7 +169,7 @@ export function ReaderDiscussForm({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" disabled={locked || !draft.trim()} onClick={() => void save(true)}>
-          {saving ? "正在保存…" : "保存这条意见"}
+          {saving ? t("reader.savingNote") : t("reader.saveNote")}
         </Button>
         <Button
           type="button"
@@ -177,7 +178,7 @@ export function ReaderDiscussForm({
           onClick={() => onAmend({ reviewId: note.id, readerId: note.readerId, text: draft, discussion: talk })}
         >
           {amending ? <Loader2 className="animate-spin" /> : null}
-          {amending ? "正在按讨论改这条意见…" : "让 AI 根据我的讨论改这条意见"}
+          {amending ? t("reader.amending") : t("reader.amend")}
         </Button>
         <Button
           type="button"
@@ -191,7 +192,7 @@ export function ReaderDiscussForm({
             })();
           }}
         >
-          采纳这条意见
+          {t("reader.adoptThis")}
         </Button>
       </div>
     </>

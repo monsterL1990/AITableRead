@@ -1,14 +1,18 @@
 "use client";
 
+import { LanguageSwitch } from "@/components/language-switch";
+import { useI18n } from "@/components/locale-provider";
 import Link from "next/link";
+import type { MessageId } from "@/lib/i18n/catalog";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { DOCS_NAV } from "@/lib/docs-nav";
 import { cn } from "@/lib/utils";
 
 function DocsNav({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const { t } = useI18n();
   return (
-    <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="说明文档">
+    <nav className="flex flex-1 flex-col gap-1 px-3" aria-label={t("docs.navLabel")}>
       {DOCS_NAV.map((item) => {
         const active = pathname === item.href;
         return (
@@ -22,7 +26,7 @@ function DocsNav({ pathname, onNavigate }: { pathname: string; onNavigate?: () =
               active ? "bg-primary font-medium text-primary-foreground" : "text-foreground hover:bg-accent",
             )}
           >
-            {item.label}
+            {t(`docs.nav.${item.slug}` as MessageId)}
           </Link>
         );
       })}
@@ -30,8 +34,35 @@ function DocsNav({ pathname, onNavigate }: { pathname: string; onNavigate?: () =
   );
 }
 
+export function DocsPager({
+  previous,
+  next,
+}: {
+  previous?: (typeof DOCS_NAV)[number];
+  next?: (typeof DOCS_NAV)[number];
+}) {
+  const { t } = useI18n();
+  return (
+    <nav className="mt-12 flex items-stretch justify-between gap-3 border-t border-border pt-5 text-sm" aria-label={t("docs.pager")}>
+      {previous ? (
+        <Link href={previous.href} className="min-w-0 text-primary hover:underline">
+          {t("docs.prev", { label: t(`docs.nav.${previous.slug}` as MessageId) })}
+        </Link>
+      ) : (
+        <span />
+      )}
+      {next ? (
+        <Link href={next.href} className="min-w-0 text-primary hover:underline">
+          {t("docs.next", { label: t(`docs.nav.${next.slug}` as MessageId) })}
+        </Link>
+      ) : null}
+    </nav>
+  );
+}
+
 export function DocsShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const open = openPath === pathname;
   const current = DOCS_NAV.find((item) => item.href === pathname);
@@ -63,8 +94,8 @@ export function DocsShell({ children }: { children: ReactNode }) {
           <Link href="/docs" className="flex items-center gap-2" onClick={() => setOpenPath(null)}>
             <span className="seal">围</span>
             <span>
-              <span className="block text-base font-medium leading-none">围读</span>
-              <span className="mt-1 block text-xs text-muted-foreground">说明文档</span>
+              <span className="block text-base font-medium leading-none">{t("docs.brand")}</span>
+              <span className="mt-1 block text-xs text-muted-foreground">{t("docs.subtitle")}</span>
             </span>
           </Link>
           <button
@@ -72,13 +103,14 @@ export function DocsShell({ children }: { children: ReactNode }) {
             className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
             onClick={() => setOpenPath(null)}
           >
-            关闭
+            {t("docs.close")}
           </button>
         </div>
         <DocsNav pathname={pathname} onNavigate={() => setOpenPath(null)} />
         <div className="border-t border-border px-5 py-4">
+          <LanguageSwitch className="mb-3" />
           <Link href="/" className="text-sm text-muted-foreground hover:text-primary">
-            进入稿房
+            {t("docs.enter")}
           </Link>
         </div>
       </aside>
@@ -86,14 +118,14 @@ export function DocsShell({ children }: { children: ReactNode }) {
       {open ? (
         <button
           type="button"
-          aria-label="关闭目录"
+          aria-label={t("docs.closeNav")}
           className="fixed inset-0 z-40 bg-[#1c1712]/40 md:hidden"
           onClick={() => setOpenPath(null)}
         />
       ) : null}
 
       <div className="md:pl-60">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-[#f7f1e6]/95 px-4 py-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-border bg-[#f7f1e6]/95 px-4 py-3 backdrop-blur md:hidden">
           <button
             type="button"
             className="rounded-md border border-border bg-card px-3 py-1.5 text-sm"
@@ -101,9 +133,10 @@ export function DocsShell({ children }: { children: ReactNode }) {
             aria-controls="docs-nav"
             onClick={() => setOpenPath(pathname)}
           >
-            目录
+            {t("docs.contents")}
           </button>
-          <p className="truncate text-sm font-medium">{current?.label ?? "说明文档"}</p>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium">{current ? t(`docs.nav.${current.slug}` as MessageId) : t("docs.fallback")}</p>
+          <LanguageSwitch />
         </header>
         <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10">{children}</div>
       </div>

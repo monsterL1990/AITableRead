@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useI18n } from "@/components/locale-provider";
 import { ModeBanner } from "@/components/mode-banner";
 import { Shell } from "@/components/shell";
 import {
@@ -29,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import type { MessageId } from "@/lib/i18n/catalog";
 import { formatWhen } from "@/lib/format";
 import { STEPS } from "@/lib/pipeline";
 import type { ProjectSummary, PublicConfig, StartFrom } from "@/lib/types";
@@ -43,7 +45,7 @@ async function readList(
     router.replace("/login");
     return;
   }
-  if (!listRes.ok) throw new Error("稿单没有载入。");
+  if (!listRes.ok) throw new Error("home.loadFailed");
   const body = (await listRes.json()) as { projects: ProjectSummary[] };
   setProjects(body.projects);
   if (configRes.ok) setConfig((await configRes.json()) as PublicConfig);
@@ -51,6 +53,7 @@ async function readList(
 
 export function ProjectHome() {
   const router = useRouter();
+  const { t, show } = useI18n();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,7 +75,7 @@ export function ProjectHome() {
     try {
       await readList(router, setProjects, setConfig);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "稿单没有载入。");
+      setError(loadError instanceof Error ? show(loadError.message) : t("home.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -88,7 +91,7 @@ export function ProjectHome() {
           if (!cancelled) setConfig(next);
         });
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "稿单没有载入。");
+        if (!cancelled) setError(loadError instanceof Error ? show(loadError.message) : t("home.loadFailed"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -96,12 +99,14 @@ export function ProjectHome() {
     return () => {
       cancelled = true;
     };
+    // Language helpers are closed over for this load only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   async function createProject() {
     const nextTitle = title.trim();
     if (!nextTitle) {
-      toast.error("先写一个标题。");
+      toast.error(t("home.needTitle"));
       return;
     }
     setCreating(true);
@@ -125,12 +130,12 @@ export function ProjectHome() {
       }
       const data = (await response.json().catch(() => ({}))) as { error?: string; project?: { id: string } };
       if (!response.ok || !data.project) {
-        toast.error(data.error || "没能开稿。");
+        toast.error(data.error ? show(data.error) : t("home.createFailed"));
         return;
       }
       router.push(`/projects/${data.project.id}`);
     } catch {
-      toast.error("没能开稿。");
+      toast.error(t("home.createFailed"));
     } finally {
       setCreating(false);
     }
@@ -143,12 +148,12 @@ export function ProjectHome() {
       return;
     }
     if (!response.ok) {
-      toast.error("没能删除。");
+      toast.error(t("home.deleteFailed"));
       return;
     }
     setProjects((current) => current.filter((item) => item.id !== project.id));
     setPendingDelete(null);
-    toast.success("已删除。");
+    toast.success(t("home.deleted"));
   }
 
   return (
@@ -156,33 +161,29 @@ export function ProjectHome() {
       <div className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-medium">稿单</h1>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-              三步：想法到大纲，大纲到初稿，稿件到润色。每一步改到认可再确认，确认之前不能跳到下一步。
-            </p>
+            <h1 className="text-2xl font-medium">{t("home.title")}</h1>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">{t("home.intro")}</p>
           </div>
           <Button type="button" onClick={() => setOpen(true)}>
-            新开一稿
+            {t("home.new")}
           </Button>
         </div>
         <ModeBanner config={config} />
-        {loading ? <p className="text-sm text-muted-foreground">正在读稿单…</p> : null}
+        {loading ? <p className="text-sm text-muted-foreground">{t("home.loading")}</p> : null}
         {error ? (
           <div className="sheet rounded-lg border border-border px-4 py-5">
             <p className="text-sm">{error}</p>
             <Button type="button" variant="outline" className="mt-3" onClick={() => void load()}>
-              再试一次
+              {t("common.retry")}
             </Button>
           </div>
         ) : null}
         {!loading && !error && projects.length === 0 ? (
           <div className="sheet rounded-lg border border-dashed border-border px-6 py-12">
-            <h2 className="text-lg font-medium">还没有稿子</h2>
-            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              可以从一个想法开始，也可以直接放进大纲或一份完整稿件。人物要写成成年人。
-            </p>
+            <h2 className="text-lg font-medium">{t("home.emptyTitle")}</h2>
+            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{t("home.emptyBody")}</p>
             <Button type="button" className="mt-4" onClick={() => setOpen(true)}>
-              新开一稿
+              {t("home.new")}
             </Button>
           </div>
         ) : null}
@@ -197,15 +198,15 @@ export function ProjectHome() {
                       {project.title}
                     </Link>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {step?.title} · {formatWhen(project.updatedAt)}
+                      {step ? t(`step.${step.id}.title` as MessageId) : ""} · {show(formatWhen(project.updatedAt))}
                     </p>
                   </div>
-                  {project.polishConfirmed ? <Badge>润色已确认</Badge> : <Badge variant="outline">进行中</Badge>}
+                  {project.polishConfirmed ? <Badge>{t("home.confirmed")}</Badge> : <Badge variant="outline">{t("home.inProgress")}</Badge>}
                 </div>
                 <div className="mt-4 flex min-w-0 items-center justify-between gap-3 border-t border-border px-4 py-3">
                   <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">{project.archivePath}</p>
                   <Button type="button" variant="ghost" size="sm" onClick={() => setPendingDelete(project)}>
-                    删除
+                    {t("home.delete")}
                   </Button>
                 </div>
               </li>
@@ -217,22 +218,22 @@ export function ProjectHome() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>新开一稿</DialogTitle>
-            <DialogDescription>选一个起点。目标字数会写进生成和质检。</DialogDescription>
+            <DialogTitle>{t("home.dialogTitle")}</DialogTitle>
+            <DialogDescription>{t("home.dialogBody")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="new-title">标题</Label>
-              <Input id="new-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：回声" />
+              <Label htmlFor="new-title">{t("home.titleLabel")}</Label>
+              <Input id="new-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("home.titlePlaceholder")} />
             </div>
             <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">从哪里开始</legend>
+              <legend className="text-sm font-medium">{t("home.startFrom")}</legend>
               <div className="grid gap-2 sm:grid-cols-3">
                 {(
                   [
-                    ["idea", "从想法"],
-                    ["outline", "从大纲"],
-                    ["manuscript", "从完整稿件"],
+                    ["idea", t("home.fromIdea")],
+                    ["outline", t("home.fromOutline")],
+                    ["manuscript", t("home.fromManuscript")],
                   ] as const
                 ).map(([value, label]) => (
                   <label key={value} className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${startFrom === value ? "border-primary bg-accent" : "border-border"}`}>
@@ -244,39 +245,39 @@ export function ProjectHome() {
             </fieldset>
             {startFrom === "idea" ? (
               <div className="space-y-2">
-                <Label htmlFor="new-idea">想法</Label>
-                <Textarea id="new-idea" value={idea} onChange={(event) => setIdea(event.target.value)} placeholder="两个成年人。他们是谁，想要什么，这一节发生什么。" className="min-h-32" />
+                <Label htmlFor="new-idea">{t("home.idea")}</Label>
+                <Textarea id="new-idea" value={idea} onChange={(event) => setIdea(event.target.value)} placeholder={t("home.ideaPlaceholder")} className="min-h-32" />
               </div>
             ) : null}
             {startFrom === "outline" ? (
               <div className="space-y-2">
-                <Label htmlFor="new-outline">大纲</Label>
-                <Textarea id="new-outline" value={outline} onChange={(event) => setOutline(event.target.value)} placeholder="节拍写细一点。确认这份大纲之后才能写初稿。" className="min-h-32" />
+                <Label htmlFor="new-outline">{t("home.outline")}</Label>
+                <Textarea id="new-outline" value={outline} onChange={(event) => setOutline(event.target.value)} placeholder={t("home.outlinePlaceholder")} className="min-h-32" />
               </div>
             ) : null}
             {startFrom === "manuscript" ? (
               <div className="space-y-2">
-                <Label htmlFor="new-manuscript">完整稿件</Label>
-                <Textarea id="new-manuscript" value={manuscript} onChange={(event) => setManuscript(event.target.value)} placeholder="这份稿子直接进入润色。大纲和初稿两步记为已确认。" className="min-h-32" />
+                <Label htmlFor="new-manuscript">{t("home.manuscript")}</Label>
+                <Textarea id="new-manuscript" value={manuscript} onChange={(event) => setManuscript(event.target.value)} placeholder={t("home.manuscriptPlaceholder")} className="min-h-32" />
               </div>
             ) : null}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="new-min">目标下限</Label>
+                <Label htmlFor="new-min">{t("home.wordMin")}</Label>
                 <Input id="new-min" inputMode="numeric" value={wordMin} onChange={(event) => setWordMin(event.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-max">目标上限</Label>
+                <Label htmlFor="new-max">{t("home.wordMax")}</Label>
                 <Input id="new-max" inputMode="numeric" value={wordMax} onChange={(event) => setWordMax(event.target.value)} />
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              取消
+              {t("home.cancel")}
             </Button>
             <Button type="button" disabled={creating || !title.trim()} onClick={() => void createProject()}>
-              {creating ? "正在开稿…" : "开始"}
+              {creating ? t("home.creating") : t("home.start")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -285,12 +286,12 @@ export function ProjectHome() {
       <AlertDialog open={pendingDelete !== null} onOpenChange={(next) => { if (!next) setPendingDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除「{pendingDelete?.title}」？</AlertDialogTitle>
-            <AlertDialogDescription>大纲、初稿、润色稿、版本和流程记录都会去掉，不能恢复。</AlertDialogDescription>
+            <AlertDialogTitle>{t("home.deleteAsk", { title: pendingDelete?.title ?? "" })}</AlertDialogTitle>
+            <AlertDialogDescription>{t("home.deleteBody")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>留下</AlertDialogCancel>
-            <AlertDialogAction onClick={() => pendingDelete && void remove(pendingDelete)}>删除</AlertDialogAction>
+            <AlertDialogCancel>{t("home.keep")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => pendingDelete && void remove(pendingDelete)}>{t("home.delete")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

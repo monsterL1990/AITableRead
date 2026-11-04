@@ -1,11 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useI18n } from "@/components/locale-provider";
 
 const NARROW = "(max-width: 767px)";
 
 /** Body screenshots stay in the column until the reader asks for a larger view. */
+export function DocsCover() {
+  const { t } = useI18n();
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/docs-assets/cover.png" alt={t("docs.coverAlt")} className="h-auto w-full rounded-md border border-border" />
+  );
+}
+
 export function DocsZoomImage({ src, alt }: { src: string; alt: string }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const openedAt = useRef(0);
 
@@ -47,7 +57,7 @@ export function DocsZoomImage({ src, alt }: { src: string; alt: string }) {
       <img
         src={src}
         alt={alt}
-        title="双击放大"
+        title={t("docs.zoomTitle")}
         loading="lazy"
         decoding="async"
         draggable={false}
@@ -62,7 +72,7 @@ export function DocsZoomImage({ src, alt }: { src: string; alt: string }) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={alt || "放大图片"}
+          aria-label={alt || t("docs.zoom")}
           className="fixed inset-0 z-[80] overflow-auto bg-[#1c1712]/92"
           onClick={onBackdropClick}
         >
@@ -74,7 +84,7 @@ export function DocsZoomImage({ src, alt }: { src: string; alt: string }) {
               setOpen(false);
             }}
           >
-            关闭
+            {t("docs.close")}
           </button>
           <div className="flex min-h-full items-center justify-center px-4 py-16">
             {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -2,12 +2,14 @@
 
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useI18n } from "@/components/locale-provider";
 import { ProseField } from "@/components/prose-field";
+import type { MessageId } from "@/lib/i18n/catalog";
 import { ReaderDiscussDialog, ReaderTriageControls } from "@/components/reader-triage";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { countChars } from "@/lib/format";
-import { READER_REVISE_NEED_ADOPTION, STEPS, qualityReviseBlock, reviewTriageOf, reviewsForStep, textForStep, versionsOf, wordTargetLabel } from "@/lib/pipeline";
+import { READER_REVISE_NEED_ADOPTION, qualityReviseBlock, reviewTriageOf, reviewsForStep, textForStep, versionsOf, wordTargetLabel } from "@/lib/pipeline";
 import {
   readerCardBody,
   readerCardFailed,
@@ -58,7 +60,9 @@ export function StepPanels({
   onRollback: (versionId: string) => void;
   onConfirm: () => void;
 }) {
-  const step = STEPS.find((item) => item.id === viewStep)!;
+  const { t, show } = useI18n();
+  const stepResult = t(`step.${viewStep}.result` as MessageId);
+  const stepHint = t(`step.${viewStep}.hint` as MessageId);
   const kind = viewStep === 1 ? "outline" : viewStep === 2 ? "draft" : "polish";
   const text = textForStep(project, viewStep);
   const versions = versionsOf(project, kind);
@@ -80,41 +84,41 @@ export function StepPanels({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm leading-6 text-muted-foreground">{step.hint}</p>
+      <p className="text-sm leading-6 text-muted-foreground">{stepHint}</p>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel kicker="输入" title={viewStep === 1 ? "想法" : viewStep === 2 ? "大纲" : "待润色的稿件"}>
+        <Panel kicker={t("panel.input")} title={viewStep === 1 ? t("panel.inputIdea") : viewStep === 2 ? t("panel.inputOutline") : t("panel.inputDraft")}>
           {viewStep === 1 ? (
-            <ProseField id="idea" label="这一节想写什么" hint="人物必须是成年人。" value={project.idea} readOnly={busy} placeholder="两个成年人。他们是谁，想要什么，这一节发生什么。" onChange={(idea) => onChange({ idea })} />
+            <ProseField id="idea" label={t("panel.ideaLabel")} hint={t("panel.ideaHint")} value={project.idea} readOnly={busy} placeholder={t("panel.ideaPlaceholder")} onChange={(idea) => onChange({ idea })} />
           ) : null}
           {viewStep === 2 ? (
-            <ProseField id="outline-source" label="按这份大纲写" value={project.outline} readOnly={busy} onChange={(outline) => onChange({ outline })} />
+            <ProseField id="outline-source" label={t("panel.outlineSource")} value={project.outline} readOnly={busy} onChange={(outline) => onChange({ outline })} />
           ) : null}
           {viewStep === 3 ? (
-            <ProseField id="draft-source" label="初稿或导入的稿件" hint="润色默认对着这一份改。从完整稿件进来时，它已经抄进右边的润色稿。" value={project.draft} readOnly={busy} onChange={(draft) => onChange({ draft })} />
+            <ProseField id="draft-source" label={t("panel.draftSource")} hint={t("panel.draftHint")} value={project.draft} readOnly={busy} onChange={(draft) => onChange({ draft })} />
           ) : null}
           <div className="mt-3">
             <Button type="button" disabled={busy || (viewStep === 1 ? !project.idea.trim() : viewStep === 2 ? !project.outline.trim() : !project.draft.trim() && !project.polished.trim())} onClick={onGenerate}>
               {generating === "generate" ? <Loader2 className="animate-spin" /> : null}
-              {generating === "generate" ? "正在写…" : viewStep === 1 ? "生成大纲" : viewStep === 2 ? "生成初稿" : "生成润色"}
+              {generating === "generate" ? t("panel.writing") : viewStep === 1 ? t("panel.generateOutline") : viewStep === 2 ? t("panel.generateDraft") : t("panel.generatePolish")}
             </Button>
           </div>
         </Panel>
-        <Panel kicker="结果" title={step.result}>
+        <Panel kicker={t("panel.result")} title={stepResult}>
           {showWords ? (
             <p className="mb-2 text-sm text-muted-foreground">
-              实际 {count} 字 · 目标 {wordTargetLabel(project)}
-              {project.wordMin && count < project.wordMin ? " · 还短于下限" : ""}
-              {project.wordMax && count > project.wordMax ? " · 超过上限" : ""}
+              {t("panel.lengthLine", { count, target: show(wordTargetLabel(project)) })}
+              {project.wordMin && count < project.wordMin ? t("panel.short") : ""}
+              {project.wordMax && count > project.wordMax ? t("panel.long") : ""}
             </p>
           ) : (
-            <p className="mb-2 text-sm text-muted-foreground">{count} 字</p>
+            <p className="mb-2 text-sm text-muted-foreground">{t("field.chars", { count })}</p>
           )}
           <ProseField
             id={`result-${viewStep}`}
-            label={`可编辑的${step.result}`}
+            label={t("panel.editable", { name: stepResult })}
             value={text}
             readOnly={busy}
-            placeholder="生成后会出现在这里。也可以自己写。"
+            placeholder={t("panel.resultPlaceholder")}
             onChange={(value) => onChange(viewStep === 1 ? { outline: value } : viewStep === 2 ? { draft: value } : { polished: value })}
           />
         </Panel>
@@ -122,19 +126,19 @@ export function StepPanels({
 
       <section className="sheet space-y-4 rounded-lg border border-primary/30 bg-paper px-4 py-4">
         <div>
-          <h2 className="text-base font-medium">确认这一步</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">先改到你认可，再确认。读者可以一个都不请。确认之前不能进入后面的主步骤。</p>
+          <h2 className="text-base font-medium">{t("panel.confirmTitle")}</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("panel.confirmHint")}</p>
         </div>
         <div className="space-y-2">
-          <label htmlFor="feedback" className="text-sm font-medium">你的修改意见</label>
-          <Textarea id="feedback" value={feedback} readOnly={busy} onChange={(event) => onFeedback(event.target.value)} placeholder="直接写要改什么。例如：第四拍写具体一点，别再缩短。" className="min-h-28 bg-paper" />
+          <label htmlFor="feedback" className="text-sm font-medium">{t("panel.yourNotes")}</label>
+          <Textarea id="feedback" value={feedback} readOnly={busy} onChange={(event) => onFeedback(event.target.value)} placeholder={t("panel.yourNotesPlaceholder")} className="min-h-28 bg-paper" />
           <Button type="button" disabled={busy || !feedback.trim() || !text.trim()} onClick={() => onRevise("user")}>
-            {generating === "user" ? "正在按意见改…" : "按这条意见改一版"}
+            {generating === "user" ? t("panel.revisingYours") : t("panel.reviseYours")}
           </Button>
         </div>
         <div className="space-y-3 border-t border-border pt-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">读者（可选）</h3>
+            <h3 className="text-sm font-medium">{t("panel.readers")}</h3>
             <Button
               type="button"
               variant="outline"
@@ -144,15 +148,15 @@ export function StepPanels({
               aria-describedby={readerFailure ? "reader-action-error" : undefined}
               onClick={onReviewAll}
             >
-              {reviewAllButtonLabel(generating, readerFailure?.readerId === null)}
+              {show(reviewAllButtonLabel(generating, readerFailure?.readerId === null))}
             </Button>
           </div>
           {readerFailure ? (
             <p id="reader-action-error" role="alert" className="text-sm leading-6 text-destructive">
-              {readerFailure.message}
+              {show(readerFailure.message)}
             </p>
           ) : null}
-          {visibleReaders.length === 0 ? <p className="text-sm text-muted-foreground">没有可请的读者。到「读者」页取消屏蔽，或加一位。</p> : null}
+          {visibleReaders.length === 0 ? <p className="text-sm text-muted-foreground">{t("panel.noReaders")}</p> : null}
           <ul className="grid gap-3 md:grid-cols-3">
             {visibleReaders.map((reader) => {
               const note = notes.find((item) => item.readerId === reader.id);
@@ -175,7 +179,7 @@ export function StepPanels({
                       aria-describedby={failed ? "reader-action-error" : undefined}
                       onClick={() => onReview(reader.id)}
                     >
-                      {reviewOneButtonLabel(generating === reader.id, Boolean(note?.text.trim()), failed)}
+                      {show(reviewOneButtonLabel(generating === reader.id, Boolean(note?.text.trim()), failed))}
                     </Button>
                   </div>
                   {body.opinion ? <ReaderOpinion key={note?.id ?? reader.id} text={body.opinion} expandable /> : null}
@@ -187,9 +191,9 @@ export function StepPanels({
                       onDiscuss={() => setDiscussId(note.id)}
                     />
                   ) : null}
-                  {body.error ? <p className="mt-2 text-xs leading-5 text-destructive">{body.error}</p> : null}
+                  {body.error ? <p className="mt-2 text-xs leading-5 text-destructive">{show(body.error)}</p> : null}
                   {!body.opinion && !body.error ? (
-                    <ReaderOpinion key={`${reader.id}-empty`} text={waiting ? "正在看…" : "还没有意见。"} expandable={false} />
+                    <ReaderOpinion key={`${reader.id}-empty`} text={waiting ? t("panel.readerWatching") : t("panel.readerEmpty")} expandable={false} />
                   ) : null}
                 </li>
               );
@@ -201,15 +205,15 @@ export function StepPanels({
               variant="outline"
               data-action="revise-from-readers"
               disabled={busy || adoptedCount === 0}
-              title={reviseHint ?? undefined}
+              title={reviseHint ? show(reviseHint) : undefined}
               aria-describedby={reviseHint ? "readers-revise-hint" : undefined}
               onClick={() => onRevise("readers")}
             >
-              {generating === "readers-revise" ? "正在按读者意见改…" : "按已有读者意见改一版"}
+              {generating === "readers-revise" ? t("panel.revisingReaders") : t("panel.reviseReaders")}
             </Button>
             {reviseHint ? (
               <p id="readers-revise-hint" className="text-sm text-muted-foreground">
-                {reviseHint}
+                {show(reviseHint)}
               </p>
             ) : null}
           </div>
@@ -217,31 +221,31 @@ export function StepPanels({
         {viewStep > 1 ? (
           <div className="space-y-2 border-t border-border pt-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-medium">结构质检</h3>
+              <h3 className="text-sm font-medium">{t("panel.quality")}</h3>
               <Button type="button" variant="outline" size="sm" disabled={busy || !text.trim()} onClick={onQuality}>
-                {generating === "quality" ? "正在对照大纲…" : "跑一次结构质检"}
+                {generating === "quality" ? t("panel.qualityRunning") : t("panel.qualityRun")}
               </Button>
             </div>
             {quality && qualityMessage ? (
-              <p className="text-sm leading-6">{qualityMessage}</p>
+              <p className="text-sm leading-6">{show(qualityMessage)}</p>
             ) : null}
-            {quality && qualityMessage ? <p className="text-xs text-muted-foreground">上次对照更早正文写下的清单：</p> : null}
-            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{quality?.text || "还没有清单。质检只查贴大纲、字数和细节缺口，不是另一位读者。"}</p>
+            {quality && qualityMessage ? <p className="text-xs text-muted-foreground">{t("panel.qualityStale")}</p> : null}
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{quality?.text || t("panel.qualityEmpty")}</p>
             <Button
               type="button"
               variant="outline"
               disabled={busy || !qualityReady}
-              title={quality && qualityMessage ? qualityMessage : undefined}
+              title={quality && qualityMessage ? show(qualityMessage) : undefined}
               onClick={() => onRevise("quality")}
             >
-              {generating === "quality-revise" ? "正在按质检改…" : "按质检意见再改"}
+              {generating === "quality-revise" ? t("panel.revisingQuality") : t("panel.reviseQuality")}
             </Button>
           </div>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-          <p className="text-sm text-muted-foreground">{project.confirmed[viewStep] ? "这一步已经确认过。还可以继续改，再确认一次。" : "确认之后才能进入下一步。"}</p>
+          <p className="text-sm text-muted-foreground">{project.confirmed[viewStep] ? t("panel.alreadyConfirmed") : t("panel.confirmToAdvance")}</p>
           <Button type="button" size="lg" disabled={busy || !text.trim()} onClick={onConfirm}>
-            确认本步定稿
+            {t("panel.confirmFinal")}
           </Button>
         </div>
       </section>
@@ -260,13 +264,13 @@ export function StepPanels({
       />
 
       <section className="space-y-2">
-        <h2 className="text-sm font-medium">版本</h2>
-        {versions.length === 0 ? <p className="text-sm text-muted-foreground">还没有入库的版本。生成或确认后会留下。</p> : null}
+        <h2 className="text-sm font-medium">{t("panel.versions")}</h2>
+        {versions.length === 0 ? <p className="text-sm text-muted-foreground">{t("panel.versionsEmpty")}</p> : null}
         <ul className="flex flex-wrap gap-2">
           {[...versions].reverse().map((version) => (
             <li key={version.id}>
               <Button type="button" size="sm" variant={project.currentVersion[kind] === version.id ? "secondary" : "outline"} disabled={busy} onClick={() => onRollback(version.id)}>
-                {version.label}
+                {show(version.label)}
               </Button>
             </li>
           ))}
@@ -277,6 +281,7 @@ export function StepPanels({
 }
 
 function ReaderOpinion({ text, expandable }: { text: string; expandable: boolean }) {
+  const { t } = useI18n();
   const body = useRef<HTMLParagraphElement>(null);
   const [openText, setOpenText] = useState<string | null>(null);
   const [clamped, setClamped] = useState(false);
@@ -313,7 +318,7 @@ function ReaderOpinion({ text, expandable }: { text: string; expandable: boolean
           aria-expanded={expanded}
           onClick={() => setOpenText(expanded ? null : text)}
         >
-          {expanded ? "收起" : "展开"}
+          {expanded ? t("panel.collapse") : t("panel.expand")}
         </Button>
       ) : null}
     </div>

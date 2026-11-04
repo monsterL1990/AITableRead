@@ -1,22 +1,30 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { LocaleProvider } from "@/components/locale-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { htmlLang } from "@/lib/i18n/locale";
+import { resolveRequestLocale } from "@/lib/i18n/request";
+import { translate } from "@/lib/i18n/translate";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: {
-    default: "围读",
-    template: "%s · 围读",
-  },
-  description: "围读·AI写作围读工作流。大纲、初稿、润色，经读者把一节改到能留下。",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await resolveRequestLocale();
+  return {
+    title: {
+      default: translate(locale, "meta.title"),
+      template: translate(locale, "meta.titleTemplate"),
+    },
+    description: translate(locale, "meta.description"),
+    robots: { index: false, follow: false },
+  };
+}
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await resolveRequestLocale();
   return (
-    <html lang="zh-CN" className="h-full antialiased">
+    <html lang={htmlLang(locale)} className="h-full antialiased">
       <body className="min-h-full text-foreground">
-        {children}
+        <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
         <Toaster position="top-center" />
       </body>
     </html>

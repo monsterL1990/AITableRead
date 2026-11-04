@@ -1,11 +1,14 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SettingsDesk } from "@/components/settings-desk";
 import { settingsVisibility } from "@/lib/account-policy";
 import { isResponse, requireUser } from "@/lib/api";
+import { pageMetadata } from "@/lib/i18n/request";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "设置" };
+
+export function generateMetadata() {
+  return pageMetadata("meta.settings");
+}
 
 export default async function SettingsPage() {
   const user = await requireUser();

@@ -19,7 +19,7 @@ export const runtime = "nodejs";
 
 type Params = { params: Promise<{ id: string }> };
 
-function snapshotFromBody(body: Record<string, unknown>): GenerateSnapshot | Response {
+async function snapshotFromBody(body: Record<string, unknown>): Promise<GenerateSnapshot | Response> {
   const snapshot: GenerateSnapshot = {};
   for (const key of ["idea", "outline", "draft", "polished"] as const) {
     if (body[key] === undefined) continue;
@@ -41,7 +41,7 @@ function snapshotFromBody(body: Record<string, unknown>): GenerateSnapshot | Res
   return snapshot;
 }
 
-function readReviewTriage(value: unknown): { id: string; triage: ReviewTriage } | null | Response {
+async function readReviewTriage(value: unknown): Promise<{ id: string; triage: ReviewTriage } | null | Response> {
   if (value === undefined) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) return errorJson("读者意见不对。", 400);
   const raw = value as Record<string, unknown>;
@@ -51,7 +51,7 @@ function readReviewTriage(value: unknown): { id: string; triage: ReviewTriage } 
   return { id: raw.id, triage };
 }
 
-function readReviewAmendment(value: unknown): { id: string; text: string; discussion: string } | null | Response {
+async function readReviewAmendment(value: unknown): Promise<{ id: string; text: string; discussion: string } | null | Response> {
   if (value === undefined) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) return errorJson("读者意见不对。", 400);
   const raw = value as Record<string, unknown>;
@@ -82,7 +82,7 @@ export async function PATCH(request: Request, context: Params) {
   if (body instanceof Response) return body;
   if (!body || typeof body !== "object" || Array.isArray(body)) return errorJson("请求格式不对。", 400);
   const record = body as Record<string, unknown>;
-  const snapshot = snapshotFromBody(record);
+  const snapshot = await snapshotFromBody(record);
   if (snapshot instanceof Response) return snapshot;
   let title: string | undefined;
   if (record.title !== undefined) {
@@ -96,9 +96,9 @@ export async function PATCH(request: Request, context: Params) {
   const rollbackVersionId = record.rollbackVersionId;
   if (confirmStep !== undefined && !isStepId(confirmStep)) return errorJson("步骤不对。", 400);
   if (rollbackVersionId !== undefined && typeof rollbackVersionId !== "string") return errorJson("版本不对。", 400);
-  const reviewTriage = readReviewTriage(record.reviewTriage);
+  const reviewTriage = await readReviewTriage(record.reviewTriage);
   if (reviewTriage instanceof Response) return reviewTriage;
-  const reviewAmendment = readReviewAmendment(record.reviewAmendment);
+  const reviewAmendment = await readReviewAmendment(record.reviewAmendment);
   if (reviewAmendment instanceof Response) return reviewAmendment;
 
   let gateError: string | null = null;
