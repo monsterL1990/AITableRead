@@ -1,4 +1,4 @@
-import { DocsArticle } from "@/components/docs-article";
+import { DocsLocaleArticle } from "@/components/docs-article";
 import { pageMetadata } from "@/lib/i18n/request";
 
 export function generateMetadata() {
@@ -6,5 +6,5 @@ export function generateMetadata() {
 }
 
 export default function DocsGettingStartedPage() {
-  return <DocsArticle slug="getting-started" />;
+  return <DocsLocaleArticle slug="getting-started" />;
 }

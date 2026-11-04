@@ -71,12 +71,12 @@ function cloneSettings(settings: StoredSettings): StoredSettings {
   };
 }
 
-function emptyWorkspace(): Workspace {
-  return { prompts: {}, readers: defaultReaders(), settings: emptySettings() };
+function emptyWorkspace(locale: Locale = "zh"): Workspace {
+  return { prompts: {}, readers: defaultReaders(locale), settings: emptySettings() };
 }
 
 function emptyStore(): StoreData {
-  return { version: 3, workspaces: { [LOCAL_USER_ID]: emptyWorkspace() }, projects: [] };
+  return { version: 3, workspaces: {}, projects: [] };
 }
 
 function readLocale(value: unknown): Locale | undefined {
@@ -309,7 +309,7 @@ function normalizeSettings(value: unknown): StoredSettings {
 }
 
 function normalizeReaders(value: unknown): ReaderProfile[] {
-  if (!Array.isArray(value)) return defaultReaders();
+  if (!Array.isArray(value)) return defaultReaders("zh");
   return value.map((item, index) => normalizeReader(item, index)).filter((item): item is ReaderProfile => item !== null);
 }
 
@@ -337,21 +337,23 @@ function normalize(value: unknown): StoreData {
     }
   }
   const hasLegacy = raw.prompts !== undefined || raw.readers !== undefined || raw.settings !== undefined;
-  if (!workspaces[LOCAL_USER_ID] && (hasLegacy || !workspacesRaw)) {
+  if (!workspaces[LOCAL_USER_ID] && hasLegacy) {
     workspaces[LOCAL_USER_ID] = normalizeWorkspace({
       prompts: raw.prompts,
       readers: raw.readers,
       settings: raw.settings,
     });
+  } else if (!workspaces[LOCAL_USER_ID] && !workspacesRaw && projects.length > 0) {
+    workspaces[LOCAL_USER_ID] = emptyWorkspace("zh");
   }
   const locale = readLocale(raw.locale);
   return { version: 3, ...(locale ? { locale } : {}), workspaces, projects };
 }
 
-function ensureWorkspace(store: StoreData, uid: string): Workspace {
+function ensureWorkspace(store: StoreData, uid: string, locale: Locale = "zh"): Workspace {
   const existing = store.workspaces[uid];
   if (existing) return existing;
-  const created = emptyWorkspace();
+  const created = emptyWorkspace(locale);
   store.workspaces[uid] = created;
   return created;
 }
@@ -463,10 +465,11 @@ export async function getPromptOverrides(uid = LOCAL_USER_ID): Promise<Partial<R
 export async function setPromptOverrides(
   prompts: Partial<Record<PromptKey, string>>,
   uid = LOCAL_USER_ID,
+  locale: Locale = "zh",
 ): Promise<Partial<Record<PromptKey, string>>> {
   return locked(async () => {
     const store = await read();
-    const workspace = ensureWorkspace(store, uid);
+    const workspace = ensureWorkspace(store, uid, locale);
     for (const key of PROMPT_KEYS) {
       if (!(key in prompts)) continue;
       const text = prompts[key];
@@ -478,10 +481,14 @@ export async function setPromptOverrides(
   });
 }
 
-export async function listReaders(uid = LOCAL_USER_ID): Promise<ReaderProfile[]> {
+export async function listReaders(uid = LOCAL_USER_ID, locale: Locale = "zh"): Promise<ReaderProfile[]> {
   return locked(async () => {
-    const readers = (await read()).workspaces[uid]?.readers;
-    return structuredClone(readers ?? defaultReaders());
+    const store = await read();
+    const existing = store.workspaces[uid];
+    if (existing) return structuredClone(existing.readers);
+    const workspace = ensureWorkspace(store, uid, locale);
+    await write(store);
+    return structuredClone(workspace.readers);
   });
 }
 
@@ -493,10 +500,11 @@ export async function createReader(
     origin?: ReaderProfile["origin"];
   },
   uid = LOCAL_USER_ID,
+  locale: Locale = "zh",
 ): Promise<ReaderProfile> {
   return locked(async () => {
     const store = await read();
-    const workspace = ensureWorkspace(store, uid);
+    const workspace = ensureWorkspace(store, uid, locale);
     const reader: ReaderProfile = {
       id: crypto.randomUUID(),
       name: input.name.trim(),
@@ -515,10 +523,11 @@ export async function updateReader(
   id: string,
   patch: Partial<Pick<ReaderProfile, "name" | "blurb" | "prompt" | "blocked">>,
   uid = LOCAL_USER_ID,
+  locale: Locale = "zh",
 ): Promise<ReaderProfile | null> {
   return locked(async () => {
     const store = await read();
-    const workspace = ensureWorkspace(store, uid);
+    const workspace = ensureWorkspace(store, uid, locale);
     const reader = workspace.readers.find((item) => item.id === id);
     if (!reader) return null;
     if (typeof patch.name === "string" && patch.name.trim()) reader.name = patch.name.trim();
@@ -561,10 +570,11 @@ export async function updateTextSettings(
     purgeEnabled?: boolean;
   },
   uid = LOCAL_USER_ID,
+  locale: Locale = "zh",
 ): Promise<StoredSettings> {
   return locked(async () => {
     const store = await read();
-    const workspace = ensureWorkspace(store, uid);
+    const workspace = ensureWorkspace(store, uid, locale);
     if (patch.preferredTextRoute) workspace.settings.preferredTextRoute = patch.preferredTextRoute;
     if (patch.customApi) workspace.settings.customApi = { ...patch.customApi };
     if ("dshModel" in patch) workspace.settings.dshModel = patch.dshModel ? { ...patch.dshModel } : null;
@@ -575,10 +585,10 @@ export async function updateTextSettings(
   });
 }
 
-export async function deleteReader(id: string, uid = LOCAL_USER_ID): Promise<boolean> {
+export async function deleteReader(id: string, uid = LOCAL_USER_ID, locale: Locale = "zh"): Promise<boolean> {
   return locked(async () => {
     const store = await read();
-    const workspace = ensureWorkspace(store, uid);
+    const workspace = ensureWorkspace(store, uid, locale);
     const before = workspace.readers.length;
     workspace.readers = workspace.readers.filter((item) => item.id !== id);
     if (workspace.readers.length === before) return false;

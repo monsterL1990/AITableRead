@@ -54,7 +54,7 @@ export async function PUT(request: Request) {
     prompts[key as PromptKey] = value;
   }
   try {
-    await setPromptOverrides(prompts, user.uid);
+    await setPromptOverrides(prompts, user.uid, await resolveRequestLocale(request));
     const overrides = await getPromptOverrides(user.uid);
     const locale = await resolveRequestLocale(request);
     return Response.json({

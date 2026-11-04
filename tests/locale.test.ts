@@ -6,7 +6,8 @@ import test from "node:test";
 import { catalog } from "../lib/i18n/catalog";
 import { localeFromAcceptLanguage, parseLocale, resolveLocale } from "../lib/i18n/locale";
 import { localize, translate } from "../lib/i18n/translate";
-import { getUiLocale, setUiLocale } from "../lib/store";
+import { defaultReaders } from "../lib/pipeline";
+import { getUiLocale, listReaders, setUiLocale } from "../lib/store";
 
 test("accept-language prefers English only when English ranks first", () => {
   assert.equal(localeFromAcceptLanguage(null), "zh");
@@ -66,6 +67,55 @@ test("stored and generated Chinese is translated at display time and left alone 
     localize("en", "稿子没保存，R18读者还没开始看。标题不能为空。"),
     "The manuscript wasn't saved, so R18读者 hasn't started. The title can't be empty.",
   );
+});
+
+test("DSH status lines follow the request language and keep the Chinese wording", () => {
+  assert.equal(translate("zh", "job.dsh"), "正在经 DSH 出字…");
+  assert.equal(translate("zh", "job.dshDetail", { detail: "xai / grok" }), "正在经 DSH 出字（xai / grok）…");
+  assert.equal(translate("zh", "job.dshByok", { model: "deepseek-flash" }), "正在经 DSH 出字（自备 Key · deepseek-flash）…");
+  assert.equal(translate("en", "job.dsh"), "Writing via DSH…");
+  assert.equal(translate("en", "job.dshByok", { model: "deepseek-flash" }), "Writing via DSH (your own key · deepseek-flash)…");
+});
+
+test("a new workspace is seeded in the current language and an existing one is left alone", async () => {
+  const zh = defaultReaders();
+  const en = defaultReaders("en");
+  assert.deepEqual(zh.map((reader) => reader.id), ["r18", "monster", "middle"]);
+  assert.deepEqual(en.map((reader) => reader.id), ["r18", "monster", "middle"]);
+  assert.deepEqual(zh.map((reader) => reader.name), ["R18读者", "怪物Z", "中年男"]);
+  assert.equal(en[0]?.name, "R18 reader");
+  assert.match(en[0]?.prompt ?? "", /Write in English/);
+  assert.match(zh[0]?.prompt ?? "", /写中文/);
+  assert.equal(zh[0]?.prompt.includes("Write in English"), false);
+
+  const dir = await mkdtemp(path.join(tmpdir(), "weidu-readers-"));
+  const previous = process.env.GAOJIAN_DATA_FILE;
+  process.env.GAOJIAN_DATA_FILE = path.join(dir, "store.json");
+  try {
+    const seeded = await listReaders("local", "en");
+    assert.deepEqual(seeded.map((reader) => reader.name), en.map((reader) => reader.name));
+    const again = await listReaders("local", "zh");
+    assert.deepEqual(again.map((reader) => reader.name), en.map((reader) => reader.name));
+    assert.equal(again[1]?.name, "Monster Z");
+  } finally {
+    if (previous === undefined) delete process.env.GAOJIAN_DATA_FILE;
+    else process.env.GAOJIAN_DATA_FILE = previous;
+    await rm(dir, { recursive: true, force: true });
+  }
+
+  const kept = await mkdtemp(path.join(tmpdir(), "weidu-readers-kept-"));
+  process.env.GAOJIAN_DATA_FILE = path.join(kept, "store.json");
+  try {
+    const first = await listReaders("ada", "zh");
+    assert.deepEqual(first.map((reader) => reader.name), ["R18读者", "怪物Z", "中年男"]);
+    const untouched = await listReaders("ada", "en");
+    assert.deepEqual(untouched.map((reader) => reader.name), ["R18读者", "怪物Z", "中年男"]);
+    assert.match(untouched[0]?.prompt ?? "", /写中文/);
+  } finally {
+    if (previous === undefined) delete process.env.GAOJIAN_DATA_FILE;
+    else process.env.GAOJIAN_DATA_FILE = previous;
+    await rm(kept, { recursive: true, force: true });
+  }
 });
 
 test("the language choice is stored in the manuscript store", async () => {

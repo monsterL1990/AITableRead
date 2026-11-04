@@ -75,6 +75,38 @@ test("body figures are images, not links", () => {
   assert.match(html, /src="\/docs-assets\/fig5-polish\.jpeg"/);
 });
 
+test("english docs keep the chinese structure, the images, and switch with the article", () => {
+  const slugs = ["overview", "getting-started", "readers", "api"] as const;
+  for (const slug of slugs) {
+    const zh = parseDocsMarkdown(loadDocMarkdown(slug));
+    const en = parseDocsMarkdown(loadDocMarkdown(slug, "en"));
+    assert.deepEqual(
+      en.map((block) => block.type),
+      zh.map((block) => block.type),
+      slug,
+    );
+    const srcs = (blocks: ReturnType<typeof parseDocsMarkdown>) =>
+      blocks.flatMap((block) => (block.type === "img" ? [block.src] : []));
+    assert.deepEqual(srcs(en), srcs(zh), slug);
+  }
+  const started = parseDocsMarkdown(loadDocMarkdown("getting-started", "en"));
+  const title = started.find((block) => block.type === "ol");
+  assert.equal(title?.type, "ol");
+  if (title?.type === "ol") {
+    assert.equal(title.items[0]?.some((node) => node.type === "strong" && node.text === "Title"), true);
+  }
+  assert.match(loadDocMarkdown("api", "en"), /does not require purge/);
+  assert.doesNotMatch(loadDocMarkdown("api", "en"), /DSH \+ purge/);
+  const html = textOf(createElement(DocsArticle, { slug: "getting-started", locale: "en" }));
+  assert.match(html, /src="\/docs-assets\/fig1-new.png"/);
+  assert.match(html, /src="\/docs-assets\/fig5-polish\.jpeg"/);
+  assert.match(html, /New manuscript/);
+  assert.doesNotMatch(html, /新开一稿/);
+  const chinese = textOf(createElement(DocsArticle, { slug: "overview" }));
+  assert.match(chinese, /【围读】的核心特点/);
+  assert.match(chinese, /src="\/docs-assets\/cover.png"/);
+});
+
 test("overview page includes the cover and the opening", () => {
   const html = textOf(createElement(DocsArticle, { slug: "overview" }));
   const cover = html.indexOf('src="/docs-assets/cover.png"');

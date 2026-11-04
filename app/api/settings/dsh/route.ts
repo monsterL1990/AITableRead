@@ -2,6 +2,7 @@ import { accountSettingsFields, isPresetAccount, settingsVisibility } from "@/li
 import { errorJson, isResponse, readJson, requireUser } from "@/lib/api";
 import { ensureDshDeskSession, getDshConfig, provisionDshDesk } from "@/lib/dsh";
 import { DSH_CONNECT_TIMEOUT_MS, emptyDshConnection, parseDshBrowserUrl, parseProbePorts, probeLocalDshPorts, probePortsFromEnv, readDshTokenInput } from "@/lib/dsh-setup";
+import { resolveRequestLocale } from "@/lib/i18n/request";
 import { getSettings, updateTextSettings } from "@/lib/store";
 import type { StoredDshConnection } from "@/lib/types";
 
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   if (!isRecord(body)) return errorJson("请求格式不对。", 400);
   if (body.action === "probe") return probe(body);
   if (body.action === "test") return testConnection(body);
-  if (body.action === "reconnect") return reconnect(user.uid);
+  if (body.action === "reconnect") return reconnect(user.uid, request);
   return errorJson("不知道要做哪一步。", 400);
 }
 
@@ -83,7 +84,7 @@ function storedOrEnvConnection(stored: StoredDshConnection): StoredDshConnection
 }
 
 /** 用稿库（或环境）里的地址和令牌重连。会话还在就沿用，不在就新建。页面提示不带会话 id。 */
-async function reconnect(uid: string) {
+async function reconnect(uid: string, request: Request) {
   let current;
   try {
     current = await getSettings(uid);
@@ -106,7 +107,7 @@ async function reconnect(uid: string) {
     );
     const connection = { ...source, sessionId: ensured.sessionId };
     const persist = ensured.replaced || Boolean(current.dsh?.baseUrl.trim() && current.dsh.token.trim());
-    const saved = persist ? await updateTextSettings({ dsh: connection }, uid) : current;
+    const saved = persist ? await updateTextSettings({ dsh: connection }, uid, await resolveRequestLocale(request)) : current;
     const described = accountSettingsFields("owner", saved);
     return Response.json({
       ...described,
