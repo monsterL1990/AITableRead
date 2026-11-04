@@ -1,5 +1,6 @@
 import { errorJson, isResponse, readJson, requireUser } from "@/lib/api";
 import { lengthError } from "@/lib/pipeline";
+import { resolveRequestLocale } from "@/lib/i18n/request";
 import { deleteReader, updateReader } from "@/lib/store";
 import { LIMITS } from "@/lib/types";
 
@@ -37,7 +38,7 @@ export async function PATCH(request: Request, context: Params) {
     patch.blocked = record.blocked;
   }
   try {
-    const reader = await updateReader(id, patch, user.uid);
+    const reader = await updateReader(id, patch, user.uid, await resolveRequestLocale(request));
     if (!reader) return errorJson("没有这位读者。", 404);
     return Response.json({ reader });
   } catch {
@@ -45,12 +46,12 @@ export async function PATCH(request: Request, context: Params) {
   }
 }
 
-export async function DELETE(_request: Request, context: Params) {
+export async function DELETE(request: Request, context: Params) {
   const user = await requireUser();
   if (isResponse(user)) return user;
   const { id } = await context.params;
   try {
-    const removed = await deleteReader(id, user.uid);
+    const removed = await deleteReader(id, user.uid, await resolveRequestLocale(request));
     if (!removed) return errorJson("没有这位读者。", 404);
     return Response.json({ ok: true });
   } catch {

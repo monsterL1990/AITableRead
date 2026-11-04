@@ -2,6 +2,7 @@ import { lockPresetDsModel } from "@/lib/account-policy";
 import { loadActiveTextRoute } from "@/lib/active-text-route";
 import { errorJson, isResponse, requireUser } from "@/lib/api";
 import { draftReaderFromSpec } from "@/lib/reader-spec";
+import { resolveRequestLocale } from "@/lib/i18n/request";
 import { createReader } from "@/lib/store";
 import { routeClientStatus } from "@/lib/text-route";
 import type { TextRoute } from "@/lib/types";
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
   }
   try {
     const draft = await draftReaderFromSpec({ requirement, files: named }, { route, customApi, dshModel, ephemeralProvider });
-    const reader = await createReader({ ...draft, origin: "from-spec" }, user.uid);
+    const reader = await createReader({ ...draft, origin: "from-spec" }, user.uid, await resolveRequestLocale(request));
     return Response.json({ reader }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "读者没能生成。";

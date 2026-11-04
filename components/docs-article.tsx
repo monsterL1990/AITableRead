@@ -3,6 +3,8 @@ import { DocsPager } from "@/components/docs-shell";
 import { DocsCover, DocsZoomImage } from "@/components/docs-zoom-image";
 import { DOCS_NAV, docBySlug, type DocSlug } from "@/lib/docs-nav";
 import { loadDocMarkdown, parseDocsMarkdown, type Inline } from "@/lib/docs";
+import type { Locale } from "@/lib/i18n/locale";
+import { resolveRequestLocale } from "@/lib/i18n/request";
 
 function Inlines({ nodes }: { nodes: Inline[] }) {
   return nodes.map((node, index) =>
@@ -16,9 +18,9 @@ function Inlines({ nodes }: { nodes: Inline[] }) {
   );
 }
 
-export function DocsArticle({ slug }: { slug: DocSlug }) {
+export function DocsArticle({ slug, locale = "zh" }: { slug: DocSlug; locale?: Locale }) {
   const doc = docBySlug(slug);
-  const blocks = parseDocsMarkdown(loadDocMarkdown(slug));
+  const blocks = parseDocsMarkdown(loadDocMarkdown(slug, locale));
   const index = DOCS_NAV.findIndex((item) => item.slug === slug);
   const previous = index > 0 ? DOCS_NAV[index - 1] : undefined;
   const next = index >= 0 && index < DOCS_NAV.length - 1 ? DOCS_NAV[index + 1] : undefined;
@@ -80,4 +82,10 @@ export function DocsArticle({ slug }: { slug: DocSlug }) {
       <DocsPager previous={previous} next={next} />
     </article>
   );
+}
+
+/** Server wrapper so the article follows the same language as the rest of the UI. */
+export async function DocsLocaleArticle({ slug }: { slug: DocSlug }) {
+  const locale = await resolveRequestLocale();
+  return <DocsArticle slug={slug} locale={locale} />;
 }

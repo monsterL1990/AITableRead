@@ -116,7 +116,7 @@ npm run dev
 
 - 应用路由在 `app/`，生成和存储在 `lib/`。
 - `scripts/serve.mjs` 把 Next.js 起在上面那个回环地址上。
-- 站内文档是 `content/` 里的中文 markdown，配图在 `public/docs-assets/`。
+- 站内文档的中文在 `content/`，英文在 `content/en/`，跟界面语言走。配图在 `public/docs-assets/`。
 - 测试是 `npm test`（`tsx --test tests/*.test.ts`）。
 
 ---
@@ -239,5 +239,5 @@ Not in this change:
 
 - App routes live in `app/`. Generation and storage live in `lib/`.
 - `scripts/serve.mjs` starts Next.js on the loopback address above.
-- In-app docs are Chinese markdown in `content/`, with screenshots in `public/docs-assets/`.
+- In-app docs follow the interface language: Chinese in `content/`, English in `content/en/`. Screenshots are in `public/docs-assets/`.
 - Tests are `npm test` (`tsx --test tests/*.test.ts`).

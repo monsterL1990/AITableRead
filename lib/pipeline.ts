@@ -1,5 +1,6 @@
 import { archivePath, countChars, routeMark } from "./format";
-import { DEFAULT_READER_PROMPTS } from "./prompts";
+import type { Locale } from "./i18n/locale";
+import { DEFAULT_READER_PROMPTS, DEFAULT_READER_PROMPTS_EN } from "./prompts";
 import type {
   FeedbackSource,
   GenerateSnapshot,
@@ -55,33 +56,55 @@ const KIND_LABEL: Record<VersionKind, string> = {
   polish: "润色",
 };
 
-export function defaultReaders(): ReaderProfile[] {
-  return [
+const READER_PRESETS: Record<Locale, { name: string; blurb: string; prompt: string }[]> = {
+  zh: [
     {
-      id: "r18",
       name: "R18读者",
       blurb: "主流男性向成人小说读者。看评分、追读意愿、爽点和弃文点。",
       prompt: DEFAULT_READER_PROMPTS.r18,
-      blocked: false,
-      origin: "builtin",
     },
     {
-      id: "monster",
       name: "怪物Z",
       blurb: "只代表个人口味。看喜不喜欢、戳中点和出戏点。",
       prompt: DEFAULT_READER_PROMPTS.monster,
-      blocked: false,
-      origin: "builtin",
     },
     {
-      id: "middle",
       name: "中年男",
       blurb: "看人话、前后矛盾，以及哪些句子可留、哪些别动。",
       prompt: DEFAULT_READER_PROMPTS.middle,
-      blocked: false,
-      origin: "builtin",
     },
-  ];
+  ],
+  en: [
+    {
+      name: "R18 reader",
+      blurb: "A mainstream reader of male-oriented adult fiction. Looks at the score, whether he'd keep reading, what works, and what would make him quit.",
+      prompt: DEFAULT_READER_PROMPTS_EN.r18,
+    },
+    {
+      name: "Monster Z",
+      blurb: "Only a personal taste. Looks at whether he likes it, what lands, and what pulls him out of the story.",
+      prompt: DEFAULT_READER_PROMPTS_EN.monster,
+    },
+    {
+      name: "Middle-aged man",
+      blurb: "Looks at whether people sound like people, contradictions, which lines to keep, and which to leave alone.",
+      prompt: DEFAULT_READER_PROMPTS_EN.middle,
+    },
+  ],
+};
+
+const READER_IDS = ["r18", "monster", "middle"] as const;
+
+/** New workspaces only. Stored readers are never rewritten to the other language. */
+export function defaultReaders(locale: Locale = "zh"): ReaderProfile[] {
+  return READER_PRESETS[locale].map((preset, index) => ({
+    id: READER_IDS[index]!,
+    name: preset.name,
+    blurb: preset.blurb,
+    prompt: preset.prompt,
+    blocked: false,
+    origin: "builtin" as const,
+  }));
 }
 
 export function activeReaders(readers: ReaderProfile[]): ReaderProfile[] {

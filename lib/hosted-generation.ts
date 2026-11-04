@@ -2,6 +2,9 @@ import { lockPresetDsModel } from "./account-policy";
 import { loadActiveTextRoute, type ActiveTextRoute } from "./active-text-route";
 import { getDshConfig, promptDshSession } from "./dsh";
 import { formatDshModelRef } from "./dsh-catalog";
+import type { Locale } from "./i18n/locale";
+import { resolveRequestLocale } from "./i18n/request";
+import { translate } from "./i18n/translate";
 import { routeMark } from "./format";
 import { buildGeneration, generationLogDetail, unfinishedProseMessage, type BuiltGeneration } from "./generation";
 import { streamChat } from "./llm";
@@ -270,12 +273,13 @@ async function produceText(args: {
   built: BuiltGeneration;
   plan: GenerationPlan;
   active: ActiveTextRoute;
+  locale: Locale;
   onDelta: (text: string) => void;
   onStatus: (message: string) => void;
   onWait: () => void;
   onModel: (detail: string) => void;
 }): Promise<string> {
-  const { signal, built, plan, active, onDelta, onStatus, onWait, onModel } = args;
+  const { signal, built, plan, active, locale, onDelta, onStatus, onWait, onModel } = args;
   if (plan.transport === "demo") {
     let full = "";
     const size = 18;
@@ -288,7 +292,7 @@ async function produceText(args: {
     return full;
   }
   if (plan.transport === "dsh-ephemeral") {
-    onStatus(`正在经 DSH 出字（自备 Key · ${plan.credential.model}）…`);
+    onStatus(translate(locale, "job.dshByok", { model: plan.credential.model }));
     return promptDshSession(
       { system: built.system, user: built.user },
       {
@@ -306,7 +310,7 @@ async function produceText(args: {
   }
   if (plan.transport === "dsh") {
     const viaDetail = formatDshModelRef(active.dshModel);
-    onStatus(viaDetail ? `正在经 DSH 出字（${viaDetail}）…` : "正在经 DSH 出字…");
+    onStatus(viaDetail ? translate(locale, "job.dshDetail", { detail: viaDetail }) : translate(locale, "job.dsh"));
     return promptDshSession(
       { system: built.system, user: built.user },
       {
@@ -350,6 +354,7 @@ export async function handleGenerateRequest(
   } catch {
     return jsonError("请求不是 JSON。", 400);
   }
+  const locale = await resolveRequestLocale(request);
   const record = (body ?? {}) as Record<string, unknown>;
   if (!isTask(record.task)) return jsonError("不知道要生成哪一步。", 400);
   const task = record.task;
@@ -487,6 +492,7 @@ export async function handleGenerateRequest(
             built,
             plan,
             active,
+            locale,
             onDelta: (piece) => emit(slot, { type: "delta", text: piece, task, readerId: readerForEvents }),
             onStatus: (message) => emit(slot, { type: "status", message }),
             onWait: () => emit(slot, { type: "comment" }),

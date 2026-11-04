@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Locale } from "./i18n/locale";
 import { docBySlug, type DocSlug } from "./docs-nav";
 
 export type Inline = { type: "text"; text: string } | { type: "strong"; text: string };
@@ -10,9 +11,14 @@ export type Block =
   | { type: "ul" | "ol"; items: Inline[][] }
   | { type: "img"; alt: string; src: string };
 
-export function loadDocMarkdown(slug: DocSlug): string {
+/** Chinese files in `content/` are the source. English lives in `content/en/`. */
+export function loadDocMarkdown(slug: DocSlug, locale: Locale = "zh"): string {
   const doc = docBySlug(slug);
-  return readFileSync(join(process.cwd(), "content", doc.file), "utf8");
+  const file =
+    locale === "en"
+      ? join(process.cwd(), "content", "en", doc.file)
+      : join(process.cwd(), "content", doc.file);
+  return readFileSync(file, "utf8");
 }
 
 export function parseInlines(text: string): Inline[] {

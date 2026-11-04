@@ -4,6 +4,7 @@ import { customSelectionError, parseCustomApiPatch } from "@/lib/custom-api";
 import { catalogFromValue, emptyDshCatalog, matchDshModel } from "@/lib/dsh-catalog";
 import { getDshConfig, inspectDshConnection, readDshModelCatalog, type DshEnv } from "@/lib/dsh";
 import { emptyDshConnection, mergeDshEnv, parseDshConnectionPatch } from "@/lib/dsh-setup";
+import { resolveRequestLocale } from "@/lib/i18n/request";
 import { getSettings, updateTextSettings } from "@/lib/store";
 import { parsePreferredTextRoute } from "@/lib/text-route";
 import type { CustomApiConfig, DshCatalogView, DshModelRef, PreferredTextRoute, SettingsVisibility, StoredDshConnection } from "@/lib/types";
@@ -159,7 +160,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const saved = await updateTextSettings(decision.patch, user.uid);
+    const saved = await updateTextSettings(decision.patch, user.uid, await resolveRequestLocale(request));
     const visibility = settingsVisibility(user.type);
     const described = accountSettingsFields(user.type === "custom" ? "custom" : "owner", saved);
     if (user.type === "custom") {
