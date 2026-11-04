@@ -52,7 +52,9 @@ test("reader and api pages keep their figures", () => {
   assert.equal(readers.find((block) => block.type === "img")?.type, "img");
   assert.equal(readers.find((block) => block.type === "img" && block.src === "/docs-assets/fig6-readers.jpeg")?.type, "img");
   assert.equal(api.find((block) => block.type === "img" && block.src === "/docs-assets/fig7-api.png")?.type, "img");
-  assert.match(loadDocMarkdown("api"), /DSH \+ purge 选项/);
+  assert.match(loadDocMarkdown("api"), /可选的自建 DSH/);
+  assert.match(loadDocMarkdown("api"), /不要求 purge/);
+  assert.doesNotMatch(loadDocMarkdown("api"), /DSH \+ purge/);
 });
 
 test("off-site image urls are not rendered", () => {

@@ -1,9 +1,10 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { normalizeCustomApi } from "./custom-api";
+import { emptyDshConnection, normalizeStoredDsh } from "./dsh-setup";
 import { parsePendingJob } from "./pending-job";
 import { appendLog, createProjectRecord, defaultReaders, isStartFrom, isStepId, pushVersion, reviewTriageOf } from "./pipeline";
-import type { CustomApiConfig, DshModelRef, PreferredTextRoute, Project, PromptKey, ReaderProfile, StartFrom, StepId, TextVersion } from "./types";
+import type { CustomApiConfig, DshModelRef, PreferredTextRoute, Project, PromptKey, ReaderProfile, StartFrom, StepId, StoredDshConnection, TextVersion } from "./types";
 import { LIMITS, LOCAL_USER_ID } from "./types";
 
 export type StoredSettings = {
@@ -13,7 +14,9 @@ export type StoredSettings = {
   customApi: CustomApiConfig;
   /** null 表示经 DSH 时沿用内核默认模型。 */
   dshModel: DshModelRef | null;
-  /** 自定义 API 是否经 DSH 的临时 provider 走 purge。缺省为关，直连。 */
+  /** 向导保存的 DSH。缺省或三项都空时出字仍读环境变量。 */
+  dsh?: StoredDshConnection;
+  /** 旧字段。读出来恒为 false，不再把自备 Key 送进 purge。 */
   purgeEnabled: boolean;
 };
 
@@ -36,7 +39,13 @@ function dataFile(): string {
 }
 
 function emptySettings(): StoredSettings {
-  return { preferredTextRoute: null, customApi: { baseUrl: "", apiKey: "", model: "" }, dshModel: null, purgeEnabled: false };
+  return {
+    preferredTextRoute: null,
+    customApi: { baseUrl: "", apiKey: "", model: "" },
+    dshModel: null,
+    dsh: emptyDshConnection(),
+    purgeEnabled: false,
+  };
 }
 
 function normalizeDshModel(value: unknown): DshModelRef | null {
@@ -54,7 +63,8 @@ function cloneSettings(settings: StoredSettings): StoredSettings {
     preferredTextRoute: settings.preferredTextRoute,
     customApi: { ...settings.customApi },
     dshModel: settings.dshModel ? { ...settings.dshModel } : null,
-    purgeEnabled: settings.purgeEnabled === true,
+    dsh: { ...(settings.dsh ?? emptyDshConnection()) },
+    purgeEnabled: false,
   };
 }
 
@@ -286,7 +296,8 @@ function normalizeSettings(value: unknown): StoredSettings {
     preferredTextRoute,
     customApi: normalizeCustomApi(raw?.customApi),
     dshModel: normalizeDshModel(raw?.dshModel),
-    purgeEnabled: raw?.purgeEnabled === true,
+    dsh: normalizeStoredDsh(raw?.dsh),
+    purgeEnabled: false,
   };
 }
 
@@ -524,6 +535,8 @@ export async function updateTextSettings(
     preferredTextRoute?: PreferredTextRoute;
     customApi?: CustomApiConfig;
     dshModel?: DshModelRef | null;
+    dsh?: StoredDshConnection;
+    /** 忽略。保留参数是为了旧调用不报错，写进去也是关掉。 */
     purgeEnabled?: boolean;
   },
   uid = LOCAL_USER_ID,
@@ -534,7 +547,8 @@ export async function updateTextSettings(
     if (patch.preferredTextRoute) workspace.settings.preferredTextRoute = patch.preferredTextRoute;
     if (patch.customApi) workspace.settings.customApi = { ...patch.customApi };
     if ("dshModel" in patch) workspace.settings.dshModel = patch.dshModel ? { ...patch.dshModel } : null;
-    if ("purgeEnabled" in patch) workspace.settings.purgeEnabled = patch.purgeEnabled === true;
+    if (patch.dsh) workspace.settings.dsh = { ...patch.dsh };
+    workspace.settings.purgeEnabled = false;
     await write(store);
     return cloneSettings(workspace.settings);
   });

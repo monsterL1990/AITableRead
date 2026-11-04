@@ -7,13 +7,13 @@
  * 会话还在跑时写下的短句是中途消息，不能当成结果。
  * 一条助手消息里，组装好的正文在 message.content；同一次流的 block-end 会再带一份相同正文，不能拼进去。
  * 同一轮里若先写完长稿，再补一句「已替换 / 已写入文件 / 同一份在…」，收下长稿，不收下那句确认。
- * 另开的会话抄 DSH_SESSION_ID 上的 agentPreset。DSH 上装哪些插件由使用者自己决定，围读不要求 purge。
+ * 另开的会话抄 DSH_SESSION_ID 上的 agentPreset（若该会话有）。DSH 上装哪些插件由使用者自己决定，围读不要求 purge。
  * 这里不安装插件，也不另发一条「只清洗」指令。
- * 自备 Key 且打开 purge 时，见 dsh-ephemeral.ts：session/create 之后 ephemeralProvider/attach，
- * selectModel 用返回的 providerId，finally 里 ephemeralProvider/detach。不在客户端拼 id。
- * 不调用主机 settings.update，Key 不进全局 credentials。插件未就绪时明确报错，不改成直连。
+ * 临时 provider 仍见 dsh-ephemeral.ts，只在调用方显式传入 ephemeralCredential 时使用。设置页不再打开这条。
+ * 不调用主机 settings.update，Key 不进全局 credentials。
  */
 
+import { catalogFromValue, emptyDshCatalog } from "./dsh-catalog";
 import {
   attachEphemeralProvider,
   detachEphemeralProvider,
@@ -23,12 +23,15 @@ import {
   type EphemeralCredential,
 } from "./dsh-ephemeral";
 import { countChars } from "./format";
+import type { DshCatalogView, DshSessionChoice } from "./types";
 
 export type DshEnv = {
   DSH_BASE_URL?: string;
   DSH_TOKEN?: string;
   DSH_SESSION_ID?: string;
   DSH_TIMEOUT_MS?: string;
+  DSH_BASIC_USER?: string;
+  DSH_BASIC_PASSWORD?: string;
 };
 
 export type DshConfig = {
@@ -36,6 +39,8 @@ export type DshConfig = {
   token: string;
   sessionId: string;
   timeoutMs: number;
+  basicUser: string;
+  basicPassword: string;
   configured: boolean;
   missing: string[];
 };
@@ -94,6 +99,8 @@ export function getDshConfig(env?: DshEnv): DshConfig {
     token,
     sessionId,
     timeoutMs: readTimeout(source.DSH_TIMEOUT_MS),
+    basicUser: (source.DSH_BASIC_USER ?? "").trim(),
+    basicPassword: source.DSH_BASIC_PASSWORD ?? "",
     configured: missing.length === 0,
     missing,
   };
@@ -205,7 +212,7 @@ async function runPrompt(config: DshConfig, taskText: string, deps: Deps): Promi
 }
 
 /**
- * 优先另开一轮，抄模板会话上的 agentPreset（purge 挂在这里）和 cwd。
+ * 优先另开一轮，抄模板会话上的 agentPreset（若有）和 cwd。围读不要求该预设是 purge。
  * 内核不认 session/create，或交回来的仍是模板会话时，才退回共享会话，并且它正在写就拒绝提交。
  */
 async function openJobSession(
@@ -378,8 +385,41 @@ function waitMinutes(timeoutMs: number): number {
   return Math.max(1, Math.round(timeoutMs / 60_000));
 }
 
+function sessionChoices(value: unknown): DshSessionChoice[] {
+  const items = value && typeof value === "object" && Array.isArray((value as { items?: unknown }).items)
+    ? (value as { items: unknown[] }).items
+    : [];
+  const choices: DshSessionChoice[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const sessionId = typeof row.sessionId === "string" ? row.sessionId.trim() : "";
+    if (!sessionId || sessionId.length > 200) continue;
+    choices.push({
+      sessionId,
+      title: sessionTitle(row, sessionId),
+      running: sessionTurnState(row) === "running",
+    });
+  }
+  return choices;
+}
+
+function sessionTitle(row: Record<string, unknown>, sessionId: string): string {
+  for (const key of ["title", "name", "label"]) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value.trim().slice(0, 80);
+  }
+  return sessionId;
+}
+
 function isMissingJobSession(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("独立内核里找不到这一轮新开的会话");
+}
+
+function basicAuthHeader(config: DshConfig): Record<string, string> {
+  const user = config.basicUser.trim();
+  if (!user) return {};
+  return { authorization: `Basic ${Buffer.from(`${user}:${config.basicPassword}`, "utf8").toString("base64")}` };
 }
 
 async function connect(fetchImpl: FetchLike, config: DshConfig, signal?: AbortSignal): Promise<string> {
@@ -388,21 +428,21 @@ async function connect(fetchImpl: FetchLike, config: DshConfig, signal?: AbortSi
   url.searchParams.set("interactions", "none");
   let response: Response;
   try {
-    response = await fetchImpl(url, { redirect: "manual", signal });
+    response = await fetchImpl(url, { redirect: "manual", signal, headers: basicAuthHeader(config) });
   } catch (error) {
     rethrowAbort(error);
     const reason = error instanceof Error ? error.message : "";
-    throw new Error(`连不上独立 DSH。请确认 DSH_BASE_URL 在围读所在的网络里能访问。${reason ? ` ${reason}` : ""}`);
+    throw new Error(`连不上这台 DSH。请确认地址在围读所在的网络里能访问。${reason ? ` ${reason}` : ""}`);
   }
-  if (response.status === 401) throw new Error("独立内核拒绝了启动令牌。请核对 DSH_TOKEN。");
-  if (response.status === 403) throw new Error("独立内核拒绝了来源。请把围读容器的主机名写进该内核的 trustedHosts。");
+  if (response.status === 401) throw new Error("这台 DSH 拒绝了令牌。请核对 Token。若前面还有 Basic Auth，请把用户名和密码分开填。");
+  if (response.status === 403) throw new Error("这台 DSH 拒绝了来源。请把围读所在主机名写进该内核的 trustedHosts。");
   const cookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
   let header = cookies.map((item) => item.split(";")[0]?.trim()).filter(Boolean).join("; ");
   if (!header) {
     const single = response.headers.get("set-cookie");
     if (single) header = single.split(";")[0]?.trim() ?? "";
   }
-  if (!header) throw new Error("独立内核没有发回登录 cookie。请确认 DSH_TOKEN 是这套 dsh web 的启动令牌。");
+  if (!header) throw new Error("这台 DSH 没有发回登录 cookie。请确认 Token 是这套 dsh web 的启动令牌。");
   if (response.status >= 400) throw new Error(`连不上独立内核（${response.status}）。`);
   return header;
 }
@@ -455,6 +495,50 @@ async function selectJobModel(
   }
 }
 
+export type DshInspectResult = {
+  sessions: DshSessionChoice[];
+  catalog: DshCatalogView;
+};
+
+/**
+ * 用地址和令牌列会话，并尽量拉模型目录。还没有会话 id 也能调用，给连接向导用。
+ * 会话和目录都空则抛错。目录失败但有会话时，目录带错误说明，不挡选会话。
+ */
+export async function inspectDshConnection(
+  input: { baseUrl: string; token: string; basicUser?: string; basicPassword?: string },
+  deps: { fetchImpl?: FetchLike; signal?: AbortSignal } = {},
+): Promise<DshInspectResult> {
+  const baseUrl = input.baseUrl.trim().replace(/\/+$/, "");
+  const token = input.token.trim();
+  if (!baseUrl || !token) throw new Error("要填写 DSH 地址和令牌。");
+  const config: DshConfig = {
+    baseUrl,
+    token,
+    sessionId: "",
+    timeoutMs: 8_000,
+    basicUser: input.basicUser?.trim() ?? "",
+    basicPassword: input.basicPassword ?? "",
+    configured: true,
+    missing: [],
+  };
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const cookie = await connect(fetchImpl, config, deps.signal);
+  const listed = await rpc(fetchImpl, config, cookie, "session/list", { _request: {} }, deps.signal);
+  const sessions = sessionChoices(listed);
+  let catalog: DshCatalogView;
+  try {
+    catalog = catalogFromValue(await rpc(fetchImpl, config, cookie, "session/modelCatalog", {}, deps.signal));
+  } catch (error) {
+    rethrowAbort(error);
+    const message = error instanceof Error ? error.message : "模型目录没拉下来。";
+    catalog = emptyDshCatalog(message);
+  }
+  if (sessions.length === 0 && !catalog.loaded) {
+    throw new Error(catalog.error || "连上了，但没有列出会话，也没有模型目录。");
+  }
+  return { sessions, catalog };
+}
+
 /** 实拉 session/modelCatalog。调用方负责把值收成选项；这里不写死任何模型。 */
 export async function readDshModelCatalog(deps: Pick<Deps, "fetchImpl" | "env" | "signal"> = {}): Promise<unknown> {
   const config = getDshConfig(deps.env);
@@ -480,7 +564,7 @@ async function rpc(
   try {
     response = await fetchImpl(`${config.baseUrl}/api/${method}`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie },
+      headers: { "content-type": "application/json", cookie, ...basicAuthHeader(config) },
       body: JSON.stringify({
         type: "client-request",
         rpcId: crypto.randomUUID(),
@@ -495,8 +579,8 @@ async function rpc(
     throw new Error(scrub(`调用独立内核失败。${reason}`));
   }
   const raw = await response.text();
-  if (response.status === 401) throw new Error("独立内核拒绝了连接，请核对 DSH_TOKEN。");
-  if (response.status === 403) throw new Error("独立内核拒绝了来源。请把围读容器的主机名写进该内核的 trustedHosts。");
+  if (response.status === 401) throw new Error("这台 DSH 拒绝了连接，请核对 Token。");
+  if (response.status === 403) throw new Error("这台 DSH 拒绝了来源。请把围读所在主机名写进该内核的 trustedHosts。");
   if (!response.ok) throw new Error(scrub(`独立内核返回 ${response.status}。${clip(scrub(raw))}`));
   let json: unknown;
   try {

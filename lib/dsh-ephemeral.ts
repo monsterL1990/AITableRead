@@ -1,7 +1,7 @@
 /**
  * 自备 Key 的 DSH 临时 provider。围读只当客户端。
  * 插件 dsh-ephemeral-provider v0.1.0，namespace `ephemeralProvider`。
- * 只给「非预设 + 经 DSH purge」用。预设 Grok / 预设 DeepSeek 不走这里。
+ * 只在调用方显式传入凭证时使用。设置页不再打开这条，围读也不要求 DSH 上有 purge。
  *
  * - ephemeralProvider/attach
  *   request: { sessionId, baseUrl, apiKey, model, api? }

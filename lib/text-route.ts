@@ -42,7 +42,7 @@ export type GenerationPlan =
 
 /**
  * 生成、读者生成共用的出字选择。custom 只用稿库里的接口，不用环境里的 OpenAI 兼容接口密钥。
- * ephemeralProvider 为真时不直连：DSH 没配齐就报错，Remote 未就绪由 DSH 客户端再报，不改成直连。
+ * ephemeralProvider 为真时不直连：只给显式传入的临时 provider。设置页不再打开它。DSH 没配齐就报错，不改成直连。
  */
 export function planGeneration(
   route: TextRoute,
@@ -56,7 +56,7 @@ export function planGeneration(
     if (!dsh.configured) {
       const why =
         dsh.missing.length > 0 && dsh.missing.length < 3 ? `未配齐 DSH（缺 ${dsh.missing.join("、")}）` : "未配齐 DSH";
-      throw new Error(`${why}。已打开经 DSH purge，这次不会改成直连，也不会换成演示稿。原稿保持不变。`);
+      throw new Error(`${why}。这次按 DSH 临时 provider 提交，不会改成直连，也不会换成演示稿。原稿保持不变。`);
     }
     return { transport: "dsh-ephemeral", credential: { baseUrl: llm.baseUrl, apiKey: llm.apiKey, model: llm.model } };
   }

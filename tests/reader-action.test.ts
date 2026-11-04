@@ -91,7 +91,8 @@ test("connected model copy keeps the model, url, and key note apart", () => {
     ),
   );
   assert.match(picked, /deepseek-official \/ deepseek-flash/);
-  assert.match(picked, /合规清洗随该会话生效/);
+  assert.match(picked, /不要求 purge/);
+  assert.doesNotMatch(picked, /合规清洗/);
   assert.equal(picked.includes("经自定义 API"), false);
   const chosen = textOf(
     renderToStaticMarkup(

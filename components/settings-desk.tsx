@@ -3,20 +3,22 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DshWizard } from "@/components/dsh-wizard";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { settingsSections } from "@/lib/account-policy";
 import { DEEPSEEK_MODEL_SUGGESTIONS, DEEPSEEK_OPENAI_BASE_URL, DEEPSEEK_PRESET_MODEL } from "@/lib/custom-api";
+import { DSH_PLUGIN_NOTE } from "@/lib/dsh-setup";
 import { routeMark } from "@/lib/format";
 import type { DshCatalogOption, PreferredTextRoute, SettingsResponse, SettingsVisibility } from "@/lib/types";
 
-function dshBlockedCopy(missing: string[]): string {
-  if (missing.length > 0 && missing.length < 3) {
-    return `未配齐 DSH（缺 ${missing.join("、")}），这条现在不能选。`;
+function dshRouteDetail(configured: boolean): string {
+  if (configured) {
+    return "更慢。轮询你自己的 DSH 会话。插件在那台 DSH 上由你安装，围读不要求 purge。不是本机的默认路径。";
   }
-  return "未配齐 DSH，这条现在不能选。";
+  return "还没连上。选这条会打开连接向导：粘贴浏览器地址和令牌，再选会话和模型。";
 }
 
 function savedRouteLabel(next: PreferredTextRoute): string {
@@ -27,53 +29,9 @@ function savedRouteLabel(next: PreferredTextRoute): string {
 
 export function settingsIntro(visibility: "custom-only" | "full" | "hidden"): string {
   if (visibility === "custom-only") {
-    return "这个账号只用自己的 OpenAI 兼容接口出字。密钥存在你的稿库里。默认直连，不经 purge。可以打开「经 DSH purge」，改走站点 DSH。密钥先空着也能打开页面。";
+    return "这个账号只用自己的 OpenAI 兼容接口出字。密钥存在你的稿库里。直连这把 Key。密钥先空着也能打开页面。";
   }
-  return "推荐用你自己的 OpenAI 兼容接口出字。写在 .env 的 OPENAI_BASE_URL 和 OPENAI_API_KEY 里，或把接口地址、API Key 和模型保存在下面。密钥先空着也能打开页面，这时会提示你去配置 API，不会崩溃。经 DSH 是可选项，不是默认。";
-}
-
-export function purgeSwitchDescription(enabled: boolean, scope: "custom-only" | "full"): string {
-  if (enabled) {
-    return scope === "custom-only"
-      ? "打开后，这把 Key 经 DSH 出字，合规清洗随会话生效。站点要已配齐 DSH。关掉则改回直连，不经 DSH，也不经 purge。"
-      : "打开后，若出字走这条自定义 API，这把 Key 经 DSH 出字，合规清洗随会话生效。站点要已配齐 DSH。关掉则这条 API 直连，不经 DSH，也不经 purge。";
-  }
-  return scope === "custom-only"
-    ? "现在直连 OpenAI 兼容接口，不经 DSH，也不经 purge。打开后改经 DSH，用这把 Key，并走 purge。站点要已配齐 DSH。"
-    : "现在这条自定义 API 直连，不经 DSH，也不经 purge。打开后，若出字走这条 API，则改经 DSH 并走 purge。站点要已配齐 DSH。";
-}
-
-export function CustomPurgeSwitch({
-  enabled,
-  scope,
-  disabled,
-  onChange,
-}: {
-  enabled: boolean;
-  scope: "custom-only" | "full";
-  disabled?: boolean;
-  onChange?: (next: boolean) => void;
-}) {
-  return (
-    <div className="mt-4 rounded-lg border border-border px-3 py-3">
-      <div className="flex items-start gap-3">
-        <input
-          id="custom-api-purge"
-          type="checkbox"
-          className="mt-1"
-          checked={enabled}
-          disabled={disabled}
-          onChange={(event) => {
-            onChange?.(event.target.checked);
-          }}
-        />
-        <div>
-          <Label htmlFor="custom-api-purge">经 DSH purge</Label>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{purgeSwitchDescription(enabled, scope)}</p>
-        </div>
-      </div>
-    </div>
-  );
+  return "推荐用你自己的 OpenAI 兼容接口出字。写在 .env 的 OPENAI_BASE_URL 和 OPENAI_API_KEY 里，或把接口地址、API Key 和模型保存在下面。密钥先空着也能打开页面，这时会提示你去配置 API，不会崩溃。经 DSH 是可选项，不是默认。要连的话走连接向导。插件在你自己的 DSH 上，围读不要求 purge。";
 }
 
 function modelValue(option: { provider: string; model: string }): string {
@@ -105,6 +63,7 @@ export function SettingsDesk({
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,8 +136,12 @@ export function SettingsDesk({
     }
   }
   async function choose(next: PreferredTextRoute) {
-    if (!view || saving || savingApi || next === view.preferredTextRoute) return;
-    if (next === "dsh" && !view.dshConfigured) return;
+    if (!view || saving || savingApi) return;
+    if (next === "dsh" && !view.dshConfigured) {
+      setWizardOpen(true);
+      return;
+    }
+    if (next === view.preferredTextRoute) return;
     setSaving(true);
     setPending(next);
     try {
@@ -191,16 +154,9 @@ export function SettingsDesk({
     }
   }
 
-  async function setPurge(next: boolean) {
-    if (!view || saving || savingApi || next === view.purgeEnabled) return;
-    setSaving(true);
-    try {
-      await sendPatch({ purgeEnabled: next }, next ? "已打开经 DSH purge。" : "已关掉经 DSH purge，出字改回直连。");
-    } catch {
-      toast.error("「经 DSH purge」没能保存。");
-    } finally {
-      setSaving(false);
-    }
+  function focusCustomApi() {
+    setWizardOpen(false);
+    document.getElementById("custom-api-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function saveCustom(useForRoute: boolean) {
@@ -260,7 +216,7 @@ export function SettingsDesk({
           <section className="sheet rounded-lg border border-border px-4 py-4">
             <h2 className="text-base font-medium">出字路由</h2>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              默认走 OpenAI 兼容接口：.env 里的地址和密钥，或下面保存的自定义接口。自定义接口默认直连，不经 purge；同一区可以打开「经 DSH purge」。经 DSH 更慢，只有你自己配齐了才选。这条选择管大纲、初稿、润色、读者审、结构质检、按意见改稿，以及按需求生成读者。没在这里选过、并且 DSH 三项都已填写时，出字仍会先走 DSH。
+              默认走 OpenAI 兼容接口：.env 里的地址和密钥，或下面保存的自定义接口。自定义接口直连。经 DSH 更慢，只有你自己连上了才选。这条选择管大纲、初稿、润色、读者审、结构质检、按意见改稿，以及按需求生成读者。没在这里选过、并且 DSH 已连上时，出字仍会先走 DSH。{DSH_PLUGIN_NOTE}
             </p>
             <fieldset className="mt-4 space-y-2" disabled={busy}>
               <legend className="sr-only">出字路由</legend>
@@ -308,32 +264,52 @@ export function SettingsDesk({
                   )}
                 </span>
               </label>
-              <label
-                className={`flex gap-3 rounded-lg border px-3 py-3 ${selected === "dsh" ? "border-primary bg-accent/60" : "border-border"} ${view.dshConfigured ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}
-              >
+              <label className={`flex cursor-pointer gap-3 rounded-lg border px-3 py-3 ${selected === "dsh" ? "border-primary bg-accent/60" : "border-border"}`}>
                 <input
                   type="radio"
                   name="preferredTextRoute"
                   value="dsh"
                   className="mt-1 accent-[#8f2d2a]"
                   checked={selected === "dsh"}
-                  disabled={!view.dshConfigured || busy}
+                  disabled={busy}
                   onChange={() => void choose("dsh")}
                 />
                 <span>
                   <span className="font-medium">经 DSH（可选）</span>
-                  {view.dshConfigured ? (
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">更慢。轮询会话，purge 随这次回复生效。不是本机的默认路径。</span>
-                  ) : (
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshBlockedCopy(view.dshMissing)}</span>
-                  )}
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshRouteDetail(view.dshConfigured)}</span>
+                  {view.dshConnection?.configured ? (
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                      已保存 {view.dshConnection.baseUrl}，会话 {view.dshConnection.sessionId}
+                      {view.dshConnection.tokenMask ? `，令牌 ${view.dshConnection.tokenMask}` : ""}。
+                    </span>
+                  ) : null}
                 </span>
               </label>
             </fieldset>
+            <div className="mt-4">
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setWizardOpen(true)}>
+                {view.dshConfigured ? "重新连接 DSH" : "连接 DSH"}
+              </Button>
+            </div>
+            {wizardOpen ? (
+              <div className="mt-4">
+                <DshWizard
+                  initial={view.dshConnection}
+                  onCancel={() => setWizardOpen(false)}
+                  onUseCustom={focusCustomApi}
+                  onSaved={(data) => {
+                    setView(data);
+                    setBaseUrl(data.customApi.baseUrl);
+                    setModel(data.customApi.model);
+                    setApiKey("");
+                  }}
+                />
+              </div>
+            ) : null}
             <div className="mt-4 space-y-2">
               <Label htmlFor="dsh-model">经 DSH 时的模型</Label>
               <p className="text-sm leading-6 text-muted-foreground">
-                下拉是向当前内核的 session/modelCatalog 实拉的，只列出这次能路由的模型。目录里已经有的 DeepSeek 不用再登记。不选则新开会话沿用模板会话当前的模型。目录没拉下来也不挡出字。选了之后仍经 DSH，purge 还在，不会把自定义 API 的密钥塞进会话。
+                下拉是向当前内核的 session/modelCatalog 实拉的，只列出这次能路由的模型。目录里已经有的 DeepSeek 不用再登记。不选则新开会话沿用模板会话当前的模型。目录没拉下来也不挡出字。选了之后仍经 DSH，不会把自定义 API 的密钥塞进会话。
               </p>
               {!view.dshConfigured ? <p className="text-sm leading-6 text-muted-foreground">未配齐 DSH，不能拉模型目录。</p> : null}
               {view.dshConfigured && !view.dshCatalog.loaded ? (
@@ -371,13 +347,7 @@ export function SettingsDesk({
                 </p>
               ) : null}
             </div>
-            <p className="mt-4 text-sm">
-              当前实际出字：
-              {view.purgeEnabled && view.preferredTextRoute === "custom"
-                ? "经 DSH，用这把自备 Key，并走 purge"
-                : routeMark(view.textRoute)}
-              。
-            </p>
+            <p className="mt-4 text-sm">当前实际出字：{routeMark(view.textRoute)}。</p>
             {view.textRouteNote ? (
               <p className="mt-3 rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-3 py-2 text-sm leading-6">{view.textRouteNote}</p>
             ) : null}
@@ -444,19 +414,7 @@ export function SettingsDesk({
                 </datalist>
               </div>
             </div>
-            <CustomPurgeSwitch
-              enabled={view.purgeEnabled === true}
-              scope={visibility === "custom-only" ? "custom-only" : "full"}
-              disabled={busy}
-              onChange={(next) => {
-                void setPurge(next);
-              }}
-            />
-            {!sections.showRoutePicker ? (
-              <p className="mt-4 text-sm">
-                当前实际出字：{view.purgeEnabled ? "经 DSH，用这把自备 Key，并走 purge" : routeMark(view.textRoute)}。
-              </p>
-            ) : null}
+            {!sections.showRoutePicker ? <p className="mt-4 text-sm">当前实际出字：{routeMark(view.textRoute)}。</p> : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" variant="outline" disabled={busy} onClick={applyDeepSeekPreset}>
                 填入 DeepSeek
