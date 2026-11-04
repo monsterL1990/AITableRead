@@ -14,6 +14,8 @@
  */
 
 import { catalogFromValue, emptyDshCatalog } from "./dsh-catalog";
+import http from "node:http";
+import https from "node:https";
 import {
   attachEphemeralProvider,
   detachEphemeralProvider,
@@ -150,7 +152,7 @@ async function runPrompt(config: DshConfig, taskText: string, deps: Deps): Promi
   const now = deps.now ?? Date.now;
   const credential = readyEphemeralCredential(deps.ephemeralCredential);
   throwIfAborted(deps.signal);
-  const cookie = await connect(fetchImpl, config, deps.signal);
+  const cookie = await connect(fetchImpl, config, deps.signal, true);
   const parent = await findSession(fetchImpl, config, cookie, config.sessionId, deps.signal, true);
   const job = await openJobSession(fetchImpl, config, cookie, parent, deps.signal);
   const secrets = credential ? [credential.apiKey] : undefined;
@@ -422,29 +424,198 @@ function basicAuthHeader(config: DshConfig): Record<string, string> {
   return { authorization: `Basic ${Buffer.from(`${user}:${config.basicPassword}`, "utf8").toString("base64")}` };
 }
 
-async function connect(fetchImpl: FetchLike, config: DshConfig, signal?: AbortSignal): Promise<string> {
+type ConnectObservation = {
+  cookie: string;
+  status: number;
+  location: string;
+  body: string;
+};
+
+function cookiePairs(lines: string[]): string {
+  return lines.map((item) => item.split(";")[0]?.trim() ?? "").filter(Boolean).join("; ");
+}
+
+function cookiesFromFetchHeaders(headers: Headers): string[] {
+  const listed = typeof headers.getSetCookie === "function" ? headers.getSetCookie() : [];
+  const lines = listed.filter((item) => item.trim());
+  const single = headers.get("set-cookie");
+  if (single?.trim() && !lines.some((item) => item === single || item.startsWith(`${single.split(";")[0]};`))) lines.push(single);
+  return lines;
+}
+
+function redactLaunchToken(text: string, token: string): string {
+  const secret = token.trim();
+  if (secret.length < 6 || !text.includes(secret)) return text;
+  return text.split(secret).join("…");
+}
+
+function describeExchange(path: string, config: DshConfig, seen: ConnectObservation): string {
+  const location = redactLaunchToken(seen.location, config.token);
+  const body = redactLaunchToken(seen.body.replace(/\s+/g, " ").trim().slice(0, 160), config.token);
+  const status = seen.status || "无状态";
+  const where = location ? `，Location: ${location}` : "";
+  const said = body ? `，正文「${body}」` : "";
+  return `GET ${path} 回答 ${status}${where}${said}`;
+}
+
+function connectFailure(config: DshConfig, path: string, seen: ConnectObservation): Error {
+  if (seen.status === 401) {
+    return new Error(`这台 DSH 拒绝了令牌（${describeExchange(path, config, seen)}）。请核对这次 dsh web 印出的 token=。它不是模型的 API Key。`);
+  }
+  if (seen.status === 403) {
+    return new Error(`这台 DSH 拒绝了来源（${describeExchange(path, config, seen)}）。请把围读所在主机名写进该内核的 trustedHosts。`);
+  }
+  if (seen.status === 404) {
+    return new Error(
+      `这台 DSH 没有 ${path}（回答 404）。这一版很可能不提供 /connect。请核对 dsh 版本；Token 仍是 dsh web 印出的 token=，不是模型的 API Key。`,
+    );
+  }
+  return new Error(
+    `向 ${config.baseUrl}${path} 要登录 cookie，${describeExchange(path, config, seen)}，没有 Set-Cookie。请确认 Token 是这次 dsh web 印出的 token=，不是模型的 API Key。`,
+  );
+}
+
+function versionMismatch(config: DshConfig, connectSeen: ConnectObservation, rootSeen: ConnectObservation): Error {
+  if (rootSeen.status === 401) {
+    return new Error(
+      `这台 DSH 没有 /connect（回答 404）。${describeExchange("/", config, rootSeen)}。请核对这次 dsh web 印出的 token=。它不是模型的 API Key。`,
+    );
+  }
+  if (rootSeen.status === 403) {
+    return new Error(`这台 DSH 没有 /connect（回答 404）。${describeExchange("/", config, rootSeen)}。请把围读所在主机名写进该内核的 trustedHosts。`);
+  }
+  return new Error(
+    `这台 DSH 没有 /connect（回答 ${connectSeen.status || 404}）。${describeExchange("/", config, rootSeen)}，没有 Set-Cookie。这一版可能没有给第三方客户端的登录接口。Token 不会写在这条说明里。`,
+  );
+}
+
+function connectUrl(config: DshConfig): URL {
   const url = new URL("/connect", `${config.baseUrl}/`);
   url.searchParams.set("token", config.token);
   url.searchParams.set("interactions", "none");
-  let response: Response;
+  return url;
+}
+
+function rootTokenUrl(config: DshConfig): URL {
+  const url = new URL("/", `${config.baseUrl}/`);
+  url.searchParams.set("token", config.token);
+  return url;
+}
+
+async function readConnectViaFetch(fetchImpl: FetchLike, config: DshConfig, url: URL, signal?: AbortSignal): Promise<ConnectObservation> {
+  const response = await fetchImpl(url, {
+    redirect: "manual",
+    cache: "no-store",
+    signal,
+    headers: basicAuthHeader(config),
+  });
+  const body = await response.text().catch(() => "");
+  return {
+    cookie: cookiePairs(cookiesFromFetchHeaders(response.headers)),
+    status: response.status,
+    location: response.headers.get("location") ?? "",
+    body,
+  };
+}
+
+/** GET /connect without following the 302. Node fetch sometimes hides Set-Cookie on that redirect. */
+function readConnectViaHttp(config: DshConfig, url: URL, signal?: AbortSignal): Promise<ConnectObservation> {
+  const lib = url.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = lib.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || (url.protocol === "https:" ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        method: "GET",
+        headers: {
+          ...basicAuthHeader(config),
+          host: url.host,
+          connection: "close",
+          accept: "*/*",
+        },
+        timeout: 8_000,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        const cookies: string[] = [];
+        for (let index = 0; index < res.rawHeaders.length; index += 2) {
+          if (res.rawHeaders[index]?.toLowerCase() === "set-cookie") cookies.push(res.rawHeaders[index + 1] ?? "");
+        }
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          const location = res.headers.location;
+          resolve({
+            cookie: cookiePairs(cookies),
+            status: res.statusCode ?? 0,
+            location: Array.isArray(location) ? location[0] ?? "" : location ?? "",
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+      },
+    );
+    const fail = (error: unknown) => {
+      reject(error);
+    };
+    req.on("error", fail);
+    if (signal) {
+      const abort = () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        req.destroy(error);
+      };
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    }
+    req.end();
+  });
+}
+
+function unreachable(config: DshConfig, error: unknown): Error {
+  const reason = error instanceof Error ? redactLaunchToken(error.message, config.token) : "";
+  return new Error(`连不上这台 DSH（${config.baseUrl}）。请确认地址在围读所在的网络里能访问。${reason ? ` ${reason}` : ""}`);
+}
+
+async function connect(fetchImpl: FetchLike, config: DshConfig, signal?: AbortSignal, rawFallback = false): Promise<string> {
+  const apiUrl = connectUrl(config);
+  let fetched: ConnectObservation | undefined;
   try {
-    response = await fetchImpl(url, { redirect: "manual", signal, headers: basicAuthHeader(config) });
+    fetched = await readConnectViaFetch(fetchImpl, config, apiUrl, signal);
+    if (fetched.cookie) return fetched.cookie;
   } catch (error) {
     rethrowAbort(error);
-    const reason = error instanceof Error ? error.message : "";
-    throw new Error(`连不上这台 DSH。请确认地址在围读所在的网络里能访问。${reason ? ` ${reason}` : ""}`);
+    if (!rawFallback) throw unreachable(config, error);
   }
-  if (response.status === 401) throw new Error("这台 DSH 拒绝了令牌。请核对 Token。若前面还有 Basic Auth，请把用户名和密码分开填。");
-  if (response.status === 403) throw new Error("这台 DSH 拒绝了来源。请把围读所在主机名写进该内核的 trustedHosts。");
-  const cookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
-  let header = cookies.map((item) => item.split(";")[0]?.trim()).filter(Boolean).join("; ");
-  if (!header) {
-    const single = response.headers.get("set-cookie");
-    if (single) header = single.split(";")[0]?.trim() ?? "";
+  if (!rawFallback) {
+    if (fetched) throw connectFailure(config, "/connect", fetched);
+    throw unreachable(config, new Error("没有收到 HTTP 回答"));
   }
-  if (!header) throw new Error("这台 DSH 没有发回登录 cookie。请确认 Token 是这套 dsh web 的启动令牌。");
-  if (response.status >= 400) throw new Error(`连不上独立内核（${response.status}）。`);
-  return header;
+  let raw: ConnectObservation | undefined;
+  try {
+    raw = await readConnectViaHttp(config, apiUrl, signal);
+    if (raw.cookie) return raw.cookie;
+  } catch (error) {
+    rethrowAbort(error);
+    if (fetched && fetched.status !== 404) throw connectFailure(config, "/connect", fetched);
+    if (!fetched) throw unreachable(config, error);
+  }
+  const connectStatus = raw?.status ?? fetched?.status ?? 0;
+  if (connectStatus === 404) {
+    let root: ConnectObservation;
+    try {
+      root = await readConnectViaHttp(config, rootTokenUrl(config), signal);
+    } catch (error) {
+      rethrowAbort(error);
+      const reason = error instanceof Error ? redactLaunchToken(error.message, config.token) : "";
+      throw new Error(`这台 DSH 没有 /connect（回答 404）。改试启动地址 / 时连不上。${reason ? ` ${reason}` : ""}`);
+    }
+    if (root.cookie) return root.cookie;
+    throw versionMismatch(config, raw ?? fetched ?? { cookie: "", status: 404, location: "", body: "" }, root);
+  }
+  if (raw) throw connectFailure(config, "/connect", raw);
+  if (fetched) throw connectFailure(config, "/connect", fetched);
+  throw unreachable(config, new Error("没有收到 HTTP 回答"));
 }
 
 async function templateSessionModel(
@@ -522,7 +693,7 @@ export async function inspectDshConnection(
     missing: [],
   };
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const cookie = await connect(fetchImpl, config, deps.signal);
+  const cookie = await connect(fetchImpl, config, deps.signal, true);
   const listed = await rpc(fetchImpl, config, cookie, "session/list", { _request: {} }, deps.signal);
   const sessions = sessionChoices(listed);
   let catalog: DshCatalogView;
@@ -546,7 +717,7 @@ export async function readDshModelCatalog(deps: Pick<Deps, "fetchImpl" | "env" |
     throw new Error(`未配齐 DSH（缺 ${config.missing.join("、")}）。`);
   }
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const cookie = await connect(fetchImpl, config, deps.signal);
+  const cookie = await connect(fetchImpl, config, deps.signal, true);
   return rpc(fetchImpl, config, cookie, "session/modelCatalog", {}, deps.signal);
 }
 
