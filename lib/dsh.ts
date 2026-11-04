@@ -449,20 +449,43 @@ function redactLaunchToken(text: string, token: string): string {
   return text.split(secret).join("…");
 }
 
-function connectFailure(config: DshConfig, seen: ConnectObservation): Error {
+function describeExchange(path: string, config: DshConfig, seen: ConnectObservation): string {
   const location = redactLaunchToken(seen.location, config.token);
   const body = redactLaunchToken(seen.body.replace(/\s+/g, " ").trim().slice(0, 160), config.token);
-  if (seen.status === 401) {
-    return new Error("这台 DSH 拒绝了令牌（GET /connect 回答 401）。请核对这次 dsh web 印出的 token=。它不是模型的 API Key。");
-  }
-  if (seen.status === 403) {
-    return new Error("这台 DSH 拒绝了来源（GET /connect 回答 403）。请把围读所在主机名写进该内核的 trustedHosts。");
-  }
+  const status = seen.status || "无状态";
   const where = location ? `，Location: ${location}` : "";
   const said = body ? `，正文「${body}」` : "";
-  const status = seen.status || "无状态";
+  return `GET ${path} 回答 ${status}${where}${said}`;
+}
+
+function connectFailure(config: DshConfig, path: string, seen: ConnectObservation): Error {
+  if (seen.status === 401) {
+    return new Error(`这台 DSH 拒绝了令牌（${describeExchange(path, config, seen)}）。请核对这次 dsh web 印出的 token=。它不是模型的 API Key。`);
+  }
+  if (seen.status === 403) {
+    return new Error(`这台 DSH 拒绝了来源（${describeExchange(path, config, seen)}）。请把围读所在主机名写进该内核的 trustedHosts。`);
+  }
+  if (seen.status === 404) {
+    return new Error(
+      `这台 DSH 没有 ${path}（回答 404）。这一版很可能不提供 /connect。请核对 dsh 版本；Token 仍是 dsh web 印出的 token=，不是模型的 API Key。`,
+    );
+  }
   return new Error(
-    `向 ${config.baseUrl}/connect 要登录 cookie，DSH 回答 ${status}${where}${said}，没有 Set-Cookie。请确认 Token 是这次 dsh web 印出的 token=，不是模型的 API Key。`,
+    `向 ${config.baseUrl}${path} 要登录 cookie，${describeExchange(path, config, seen)}，没有 Set-Cookie。请确认 Token 是这次 dsh web 印出的 token=，不是模型的 API Key。`,
+  );
+}
+
+function versionMismatch(config: DshConfig, connectSeen: ConnectObservation, rootSeen: ConnectObservation): Error {
+  if (rootSeen.status === 401) {
+    return new Error(
+      `这台 DSH 没有 /connect（回答 404）。${describeExchange("/", config, rootSeen)}。请核对这次 dsh web 印出的 token=。它不是模型的 API Key。`,
+    );
+  }
+  if (rootSeen.status === 403) {
+    return new Error(`这台 DSH 没有 /connect（回答 404）。${describeExchange("/", config, rootSeen)}。请把围读所在主机名写进该内核的 trustedHosts。`);
+  }
+  return new Error(
+    `这台 DSH 没有 /connect（回答 ${connectSeen.status || 404}）。${describeExchange("/", config, rootSeen)}，没有 Set-Cookie。这一版可能没有给第三方客户端的登录接口。Token 不会写在这条说明里。`,
   );
 }
 
@@ -473,8 +496,14 @@ function connectUrl(config: DshConfig): URL {
   return url;
 }
 
-async function readConnectViaFetch(fetchImpl: FetchLike, config: DshConfig, signal?: AbortSignal): Promise<ConnectObservation> {
-  const response = await fetchImpl(connectUrl(config), {
+function rootTokenUrl(config: DshConfig): URL {
+  const url = new URL("/", `${config.baseUrl}/`);
+  url.searchParams.set("token", config.token);
+  return url;
+}
+
+async function readConnectViaFetch(fetchImpl: FetchLike, config: DshConfig, url: URL, signal?: AbortSignal): Promise<ConnectObservation> {
+  const response = await fetchImpl(url, {
     redirect: "manual",
     cache: "no-store",
     signal,
@@ -490,8 +519,7 @@ async function readConnectViaFetch(fetchImpl: FetchLike, config: DshConfig, sign
 }
 
 /** GET /connect without following the 302. Node fetch sometimes hides Set-Cookie on that redirect. */
-function readConnectViaHttp(config: DshConfig, signal?: AbortSignal): Promise<ConnectObservation> {
-  const url = connectUrl(config);
+function readConnectViaHttp(config: DshConfig, url: URL, signal?: AbortSignal): Promise<ConnectObservation> {
   const lib = url.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
     const req = lib.request(
@@ -544,33 +572,50 @@ function readConnectViaHttp(config: DshConfig, signal?: AbortSignal): Promise<Co
   });
 }
 
+function unreachable(config: DshConfig, error: unknown): Error {
+  const reason = error instanceof Error ? redactLaunchToken(error.message, config.token) : "";
+  return new Error(`连不上这台 DSH（${config.baseUrl}）。请确认地址在围读所在的网络里能访问。${reason ? ` ${reason}` : ""}`);
+}
+
 async function connect(fetchImpl: FetchLike, config: DshConfig, signal?: AbortSignal, rawFallback = false): Promise<string> {
+  const apiUrl = connectUrl(config);
   let fetched: ConnectObservation | undefined;
   try {
-    fetched = await readConnectViaFetch(fetchImpl, config, signal);
+    fetched = await readConnectViaFetch(fetchImpl, config, apiUrl, signal);
     if (fetched.cookie) return fetched.cookie;
   } catch (error) {
     rethrowAbort(error);
-    if (!rawFallback) {
-      const reason = error instanceof Error ? error.message : "";
-      throw new Error(`连不上这台 DSH。请确认地址在围读所在的网络里能访问。${reason ? ` ${reason}` : ""}`);
-    }
+    if (!rawFallback) throw unreachable(config, error);
   }
   if (!rawFallback) {
-    if (fetched) throw connectFailure(config, fetched);
-    throw new Error(`连不上这台 DSH。请确认 ${config.baseUrl} 在围读所在的网络里能访问。`);
+    if (fetched) throw connectFailure(config, "/connect", fetched);
+    throw unreachable(config, new Error("没有收到 HTTP 回答"));
   }
-  let raw: ConnectObservation;
+  let raw: ConnectObservation | undefined;
   try {
-    raw = await readConnectViaHttp(config, signal);
+    raw = await readConnectViaHttp(config, apiUrl, signal);
+    if (raw.cookie) return raw.cookie;
   } catch (error) {
     rethrowAbort(error);
-    if (fetched) throw connectFailure(config, fetched);
-    const reason = error instanceof Error ? error.message : "";
-    throw new Error(`连不上这台 DSH。请确认地址在围读所在的网络里能访问。${reason ? ` ${reason}` : ""}`);
+    if (fetched && fetched.status !== 404) throw connectFailure(config, "/connect", fetched);
+    if (!fetched) throw unreachable(config, error);
   }
-  if (raw.cookie) return raw.cookie;
-  throw connectFailure(config, raw);
+  const connectStatus = raw?.status ?? fetched?.status ?? 0;
+  if (connectStatus === 404) {
+    let root: ConnectObservation;
+    try {
+      root = await readConnectViaHttp(config, rootTokenUrl(config), signal);
+    } catch (error) {
+      rethrowAbort(error);
+      const reason = error instanceof Error ? redactLaunchToken(error.message, config.token) : "";
+      throw new Error(`这台 DSH 没有 /connect（回答 404）。改试启动地址 / 时连不上。${reason ? ` ${reason}` : ""}`);
+    }
+    if (root.cookie) return root.cookie;
+    throw versionMismatch(config, raw ?? fetched ?? { cookie: "", status: 404, location: "", body: "" }, root);
+  }
+  if (raw) throw connectFailure(config, "/connect", raw);
+  if (fetched) throw connectFailure(config, "/connect", fetched);
+  throw unreachable(config, new Error("没有收到 HTTP 回答"));
 }
 
 async function templateSessionModel(
