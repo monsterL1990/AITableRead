@@ -34,9 +34,16 @@ You can put the same three values in Settings under **自定义 OpenAI 兼容接
 
 Leave the URL and key empty and the app stays up. The home page says **请先配置 API** and links to Settings.
 
-**Optional, later:** a self-hosted [DSH](https://github.com/deepseek-ai/DeepSeek-Harness) (DeepSeek Harness) instance. Set `DSH_BASE_URL`, `DSH_TOKEN`, and `DSH_SESSION_ID` only if you run one. Plugins on that instance are your business. WeiDu does not require a purge plugin, does not ship one, and does not install one for you. If the template session has an agent preset, a new turn copies that preset. That is all.
+**Optional:** a self-hosted [DSH](https://github.com/deepseek-ai/DeepSeek-Harness) (DeepSeek Harness) instance. In Settings, choose **经 DSH（可选）** or **连接 DSH**. The wizard has four cards:
 
-If those three `DSH_*` values are set and you have not picked a route in Settings, generation still prefers DSH. That is not the local default. Leave them empty, or pick **OpenAI 兼容接口（.env，推荐）** in Settings.
+1. Ask whether you already run a local or self-hosted DSH. If not, it sends you back to the custom OpenAI-compatible API.
+2. Paste the browser URL you use to open DSH. WeiDu keeps the origin as the base URL. **探测常见本机端口** tries `127.0.0.1` on `3081` and `3099` (override with `DSH_PROBE_PORTS`). A port that does not answer is a miss. The page does not wait forever.
+3. Paste the DSH token. If the server asks for HTTP Basic Auth, fill the username and password separately. **测试连接** lists sessions and, when the kernel allows it, the model catalog.
+4. Pick a session and an optional model, then save. The values stay in `data/store.json` on this machine. The success text says plugins are installed by you inside that DSH. WeiDu does not require a purge plugin, does not ship one, and does not install one for you.
+
+You can still set `DSH_BASE_URL`, `DSH_TOKEN`, and `DSH_SESSION_ID` in `.env` instead of the wizard. Optional `DSH_BASIC_USER` and `DSH_BASIC_PASSWORD` are only for a Basic Auth front. A saved wizard connection overrides those three `DSH_*` values. If the template session has an agent preset, a new turn copies that preset. That is all.
+
+If DSH is fully configured (wizard or `.env`) and you have not picked a route in Settings, generation still prefers DSH. That is not the local default. Leave it unset, or pick **OpenAI 兼容接口（.env，推荐）** in Settings.
 
 There is no hosted WeiDu service in this repository, and the defaults do not point at one.
 
@@ -143,8 +150,8 @@ On Windows, double-click `start.bat` instead of `npm run dev`. It should install
 Not in this change:
 
 - Make the local single user the only account path, and remove preset account types.
-- When `DSH_*` is fully set and no route is saved, generation still prefers DSH. The recommended local path is to leave `DSH_*` empty.
-- A DSH setup wizard and interface translations.
+- When DSH is fully set and no route is saved, generation still prefers DSH. The recommended local path is to leave it unset.
+- Interface translations.
 
 ## Layout
 

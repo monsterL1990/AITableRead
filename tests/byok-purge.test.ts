@@ -7,7 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "node:test";
 import { applyAccountTextPolicy, byokPurgeActive, lockPresetDsModel, presetDsModel, publicConfigForAccount, settingsWrite } from "../lib/account-policy";
 import { ModeBanner } from "../components/mode-banner";
-import { CustomPurgeSwitch } from "../components/settings-desk";
+import { settingsIntro } from "../components/settings-desk";
+import { DshWizard } from "../components/dsh-wizard";
 import { NewAccountTypeField } from "../components/admin-desk";
 import { complianceNoteForRoute } from "../lib/compliance";
 import { ephemeralFailureMessage, redactCredential } from "../lib/dsh-ephemeral";
@@ -15,7 +16,6 @@ import { promptDshSession } from "../lib/dsh";
 import { projectToMarkdown } from "../lib/markdown";
 import { createProjectRecord } from "../lib/pipeline";
 import { planGeneration } from "../lib/text-route";
-import type { SettingsResponse } from "../lib/types";
 
 const secret = "sk-byok-secret-9999-zzzz";
 const dshEnv = { DSH_BASE_URL: "http://dsh.example:8080", DSH_TOKEN: "t", DSH_SESSION_ID: "session-1" };
@@ -70,7 +70,7 @@ function listedSessions() {
   };
 }
 
-test("account policy keeps preset on station DSH and routes custom purge separately", () => {
+test("account policy keeps preset on station DSH and does not force purge for a custom key", () => {
   const stored = {
     preferredTextRoute: "custom" as const,
     customApi,
@@ -93,21 +93,15 @@ test("account policy keeps preset on station DSH and routes custom purge separat
 
   const purged = applyAccountTextPolicy("custom", stored, dshEnv);
   assert.equal(purged.route, "custom");
-  assert.equal(purged.ephemeralProvider, true);
-  const purgedPlan = planGeneration(purged.route, purged.customApi, dshEnv, { ephemeralProvider: true });
-  assert.equal(purgedPlan.transport, "dsh-ephemeral");
-  if (purgedPlan.transport === "dsh-ephemeral") {
-    assert.equal(purgedPlan.credential.apiKey, secret);
-    assert.equal(purgedPlan.credential.model, "deepseek-flash");
-    assert.equal(purgedPlan.credential.baseUrl, "https://api.deepseek.com");
-  }
+  assert.equal(purged.ephemeralProvider, false);
+  assert.equal(planGeneration(purged.route, purged.customApi, dshEnv, { ephemeralProvider: purged.ephemeralProvider }).transport, "custom");
 
   const ownerDirect = applyAccountTextPolicy("owner", { ...stored, preferredTextRoute: "dsh", purgeEnabled: true }, dshEnv);
   assert.equal(ownerDirect.route, "dsh");
   assert.equal(ownerDirect.ephemeralProvider, false);
   const ownerByok = applyAccountTextPolicy("owner", stored, dshEnv);
   assert.equal(ownerByok.route, "custom");
-  assert.equal(ownerByok.ephemeralProvider, true);
+  assert.equal(ownerByok.ephemeralProvider, false);
 
   assert.throws(
     () => planGeneration("custom", customApi, {}, { ephemeralProvider: true }),
@@ -128,23 +122,16 @@ test("account policy keeps preset on station DSH and routes custom purge separat
   );
 });
 
-test("purge switch persists on the workspace and stays out of the public payload", async () => {
+test("purge is not stored as a required switch and stays out of the public payload", async () => {
   const presetWrite = settingsWrite("preset-grok", { purgeEnabled: true });
   assert.equal(settingsWrite("preset-ds", { purgeEnabled: true }).ok, false);
   assert.equal(presetWrite.ok, false);
   const customWrite = settingsWrite("custom", { purgeEnabled: true });
-  assert.equal(customWrite.ok, true);
-  if (customWrite.ok) {
-    assert.equal(customWrite.patch.purgeEnabled, true);
-    assert.equal(customWrite.patch.preferredTextRoute, "custom");
-    assert.equal(customWrite.patch.dshModel, null);
-  }
+  assert.equal(customWrite.ok, false);
+  if (!customWrite.ok) assert.match(customWrite.error, /不要求 purge/);
   const ownerWrite = settingsWrite("owner", { purgeEnabled: false });
-  assert.equal(ownerWrite.ok, true);
-  if (ownerWrite.ok) {
-    assert.equal(ownerWrite.patch.purgeEnabled, false);
-    assert.equal("preferredTextRoute" in ownerWrite.patch, false);
-  }
+  assert.equal(ownerWrite.ok, false);
+  if (!ownerWrite.ok) assert.match(ownerWrite.error, /不要求 purge/);
 
   const dir = await mkdtemp(path.join(tmpdir(), "gaojian-byok-"));
   const previous = process.env.GAOJIAN_DATA_FILE;
@@ -161,32 +148,28 @@ test("purge switch persists on the workspace and stays out of the public payload
       "local",
     );
     const saved = await store.getSettings("ada");
-    assert.equal(saved.purgeEnabled, true);
+    assert.equal(saved.purgeEnabled, false);
     assert.equal(saved.customApi.apiKey, secret);
     assert.equal((await store.getSettings("local")).purgeEnabled, false);
     assert.equal((await store.getSettings("local")).customApi.apiKey, "owner-key-should-stay");
     const raw = await readFile(process.env.GAOJIAN_DATA_FILE, "utf8");
     const parsed = JSON.parse(raw) as { workspaces?: { ada?: { settings?: { purgeEnabled?: boolean; customApi?: { apiKey?: string } } } } };
-    assert.equal(parsed.workspaces?.ada?.settings?.purgeEnabled, true);
+    assert.equal(parsed.workspaces?.ada?.settings?.purgeEnabled, false);
     assert.equal(parsed.workspaces?.ada?.settings?.customApi?.apiKey, secret);
     assert.equal(raw.includes("settings.update"), false);
-    const turnedOff = await store.updateTextSettings({ purgeEnabled: false }, "ada");
-    assert.equal(turnedOff.purgeEnabled, false);
-    assert.equal(turnedOff.customApi.apiKey, secret);
+    assert.equal(saved.customApi.apiKey, secret);
 
     const config = publicConfigForAccount("custom", saved, dshEnv, extras);
     const encoded = JSON.stringify(config);
     assert.equal(encoded.includes(secret), false);
-    assert.equal(config.purgeEnabled, true);
+    assert.equal(config.purgeEnabled, false);
     assert.equal(config.customApi.apiKeyMask.endsWith("zzzz"), true);
     assert.equal("apiKey" in config.customApi, false);
-    assert.equal(byokPurgeActive(config), true);
-    assert.match(textOf(renderToStaticMarkup(createElement(ModeBanner, { config }))), /用你自己的密钥/);
-    assert.match(textOf(renderToStaticMarkup(createElement(ModeBanner, { config }))), /临时 provider/);
-    const off = publicConfigForAccount("custom", turnedOff, dshEnv, extras);
-    const offText = textOf(renderToStaticMarkup(createElement(ModeBanner, { config: off })));
-    assert.match(offText, /不经 purge/);
-    assert.equal(offText.includes("临时 provider"), false);
+    assert.equal(byokPurgeActive(config), false);
+    const banner = textOf(renderToStaticMarkup(createElement(ModeBanner, { config })));
+    assert.match(banner, /不经 purge/);
+    assert.equal(banner.includes("临时 provider"), false);
+    assert.equal(banner.includes("合规清洗"), false);
   } finally {
     if (previous === undefined) delete process.env.GAOJIAN_DATA_FILE;
     else process.env.GAOJIAN_DATA_FILE = previous;
@@ -194,40 +177,30 @@ test("purge switch persists on the workspace and stays out of the public payload
   }
 });
 
-test("settings copy explains purge on and direct off", () => {
-  const on = renderToStaticMarkup(createElement(CustomPurgeSwitch, { enabled: true, scope: "custom-only" }));
-  const onText = textOf(on);
-  assert.match(on, /id="custom-api-purge"/);
-  assert.match(on, /checked/);
-  assert.match(onText, /经 DSH purge/);
-  assert.match(onText, /合规清洗/);
-  assert.match(onText, /已配齐 DSH/);
-  const off = textOf(renderToStaticMarkup(createElement(CustomPurgeSwitch, { enabled: false, scope: "custom-only" })));
-  assert.match(off, /直连/);
-  assert.match(off, /不经 purge/);
-  const owner = textOf(renderToStaticMarkup(createElement(CustomPurgeSwitch, { enabled: true, scope: "full" })));
-  assert.match(owner, /若出字走这条自定义 API/);
-
-  const view = {
-    textRoute: "custom",
-    dshConfigured: true,
-    dshMissing: [],
-    preferredTextRoute: "custom",
-    textRouteNote: "",
-    customApi: { baseUrl: "https://api.deepseek.com", model: "deepseek-flash", apiKeyMask: "••••zzzz", configured: true, missing: [] },
-    dshModel: null,
-    dshCatalog: { loaded: false, error: "自备 Key 不从站点模型目录里选。", defaultModel: null, options: [], failures: [] },
-    accountType: "custom",
-    settingsVisibility: "custom-only",
-    purgeEnabled: true,
-  } satisfies SettingsResponse;
-  assert.equal(view.purgeEnabled, true);
+test("settings copy no longer requires purge", () => {
+  const wizard = textOf(
+    renderToStaticMarkup(
+      createElement(DshWizard, {
+        onCancel() {},
+        onSaved() {},
+        onUseCustom() {},
+      }),
+    ),
+  );
+  assert.match(wizard, /你有自己的 DSH 吗/);
+  assert.match(wizard, /没有，去用自定义接口/);
+  assert.match(wizard, /粘贴浏览器里的 DSH 地址/);
+  assert.doesNotMatch(wizard, /合规清洗|经 DSH purge|custom-api-purge/);
+  const intro = settingsIntro("full");
+  assert.match(intro, /不要求 purge/);
+  assert.doesNotMatch(intro, /经 DSH purge/);
   const project = createProjectRecord({ id: "p-byok", ownerId: "ada", title: "回声", idea: "想法" });
   const markdown = projectToMarkdown(project, "current", { textRoute: "custom", dshConfigured: true, byokPurge: true });
-  assert.match(markdown, /自备 Key/);
-  assert.match(markdown, /不写进 DSH 主机设置/);
-  assert.doesNotMatch(markdown, /不经 purge/);
+  assert.match(markdown, /不经 purge/);
+  assert.doesNotMatch(markdown, /合规清洗随/);
   assert.match(complianceNoteForRoute("custom", true, false).note, /不经 purge/);
+  assert.match(complianceNoteForRoute("dsh", true).note, /不要求 purge/);
+  assert.doesNotMatch(complianceNoteForRoute("dsh", true).note, /合规清洗/);
 });
 
 test("ephemeral provider attaches, selects, prompts, then detaches without echoing the key", async () => {
@@ -487,7 +460,8 @@ test("preset deepseek is locked to a catalog model and every new workspace gets 
   assert.match(choices, /预设 Grok/);
   assert.match(choices, /预设 DeepSeek/);
   assert.match(choices, /非预设/);
-  assert.match(choices, /经 DSH purge/);
+  assert.match(choices, /不要求 purge/);
+  assert.doesNotMatch(choices, /经 DSH purge/);
 
   const dir = await mkdtemp(path.join(tmpdir(), "gaojian-readers-"));
   const previous = process.env.GAOJIAN_DATA_FILE;

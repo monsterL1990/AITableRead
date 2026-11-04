@@ -38,17 +38,17 @@ export function NewAccountTypeField({
     {
       id: "preset-grok",
       title: "预设 Grok",
-      detail: "没有设置。出字固定经 DSH 和 purge，模型是站点的 Grok。",
+      detail: "没有设置。出字固定经 DSH，模型是站点的 Grok。围读不要求 purge。",
     },
     {
       id: "preset-ds",
       title: "预设 DeepSeek",
-      detail: "没有设置。出字固定经 DSH 和 purge，模型是站点目录里的 DeepSeek。",
+      detail: "没有设置。出字固定经 DSH，模型是站点目录里的 DeepSeek。围读不要求 purge。",
     },
     {
       id: "custom",
       title: "非预设",
-      detail: "设置里留自定义 API。默认直连，不经 purge。可以打开「经 DSH purge」。",
+      detail: "设置里留自定义 API。默认直连。围读不要求 purge。",
     },
   ];
   return (
@@ -190,7 +190,7 @@ export function AdminDesk() {
         <div>
           <h1 className="text-2xl font-medium">账号</h1>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            站长在这里开好友账号。预设 Grok 和预设 DeepSeek 都固定经 DSH 和 purge，看不到设置。非预设只用自己的 API Key，默认直连；可以打开「经 DSH purge」。新建的稿库都带 R18读者、怪物Z、中年男。没有邀请码。
+            站长在这里开好友账号。预设 Grok 和预设 DeepSeek 都固定经 DSH，看不到设置。围读不要求 purge。非预设只用自己的 API Key，默认直连。新建的稿库都带 R18读者、怪物Z、中年男。没有邀请码。
           </p>
         </div>
         <section className="sheet rounded-lg border border-border px-4 py-4">

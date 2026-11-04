@@ -1,4 +1,4 @@
-import { resolveActiveTextRoute } from "./active-text-route";
+import { loadActiveTextRoute } from "./active-text-route";
 import { customApiToLlmConfig, customIncompleteMessage } from "./custom-api";
 import { extractDocumentText } from "./documents";
 import { promptDshSession } from "./dsh";
@@ -68,12 +68,14 @@ export async function draftReaderFromSpec(
     excerpts.push(`## ${file.name}\n${slice}`);
   }
   let route: TextRoute;
+  let active: Awaited<ReturnType<typeof loadActiveTextRoute>> | null = null;
   if (deps?.route) {
     route = deps.route;
   } else if (deps && ("preference" in deps || deps.demo !== undefined || deps.complete)) {
     route = resolveTextRoute(undefined, deps.preference);
   } else {
-    route = await resolveActiveTextRoute();
+    active = await loadActiveTextRoute({ uid: deps?.uid });
+    route = active.route;
   }
   const demo = deps?.demo ?? route === "demo";
   let complete: (args: ReaderDraftTurn) => Promise<string>;
@@ -113,7 +115,11 @@ export async function draftReaderFromSpec(
     complete =
       deps?.complete ??
       (route === "dsh"
-        ? (args: ReaderDraftTurn) => promptDshSession({ system: args.system, user: args.user }, { model: deps?.dshModel })
+        ? (args: ReaderDraftTurn) =>
+            promptDshSession(
+              { system: args.system, user: args.user },
+              { model: deps?.dshModel ?? active?.dshModel ?? null, env: active?.dshEnv, fetchImpl: args.fetchImpl },
+            )
         : (args: ReaderDraftTurn) => completeChat(args));
   }
   const raw = await complete({

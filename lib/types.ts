@@ -6,7 +6,7 @@ export type VersionKind = "outline" | "draft" | "polish";
 
 export type VersionSource = "generate" | "feedback" | "quality" | "manual" | "import" | "purge";
 
-/** 出字实际走的路。custom 是设置里保存的 OpenAI 兼容接口。默认不经 DSH；打开 purge 后仍记这条偏好，提交改走 DSH 临时 provider。 */
+/** 出字实际走的路。custom 是设置里保存的 OpenAI 兼容接口。默认不经 DSH。 */
 export type TextRoute = "dsh" | "cliproxy" | "custom" | "demo";
 
 /** 用户希望走的路。稿库没存过时按环境默认：配齐 DSH 则 dsh，否则环境里的 OpenAI 兼容接口（cliproxy）。custom 只能手选。 */
@@ -16,6 +16,31 @@ export type PreferredTextRoute = "dsh" | "cliproxy" | "custom";
 export type DshModelRef = {
   provider: string;
   model: string;
+};
+
+/** 向导写进稿库的 DSH。令牌和 Basic Auth 密码只留在稿库。三项都空则仍读环境变量。 */
+export type StoredDshConnection = {
+  baseUrl: string;
+  token: string;
+  sessionId: string;
+  basicUser: string;
+  basicPassword: string;
+};
+
+/** 下发给设置页的 DSH 连接。没有令牌和 Basic Auth 密码。 */
+export type PublicDshConnection = {
+  baseUrl: string;
+  sessionId: string;
+  tokenMask: string;
+  basicUser: string;
+  hasBasicPassword: boolean;
+  configured: boolean;
+};
+
+export type DshSessionChoice = {
+  sessionId: string;
+  title: string;
+  running: boolean;
 };
 
 /** 实拉到的一条可选模型。name 是目录里的展示名。 */
@@ -199,8 +224,8 @@ export type PublicConfig = {
   /** 经 DSH 时保存的模型。null 表示沿用内核默认。 */
   dshModel: DshModelRef | null;
   /**
-   * 稿库里的「经 DSH purge」。预设账号恒为 false（他们本来就强制走站点 DSH）。
-   * 非预设为 true 时，自定义 API 改经 DSH 临时 provider。站长只有选了自定义 API 才因此改道。
+   * 旧稿库里的 purge 开关。开源单机版不再用它改道，接口里恒为 false。
+   * 插件在使用者自己的 DSH 上，围读不要求 purge。
    */
   purgeEnabled?: boolean;
   /** 当前登录账号。未登录时不带。 */
@@ -209,7 +234,7 @@ export type PublicConfig = {
   settingsVisibility?: SettingsVisibility;
 };
 
-/** preset-grok / preset-ds 都强制经 DSH purge，没有设置页。旧稿库里的 preset 读入时当成 preset-grok。 */
+/** 旧的多账号类型仍留在代码里。预设账号没有设置页。旧稿库里的 preset 读入时当成 preset-grok。 */
 export type AccountType = "owner" | "preset-grok" | "preset-ds" | "custom";
 
 /** full：站长，路由和模型都在。custom-only：只留自定义 API。hidden：两种预设都不进设置。 */
@@ -224,9 +249,10 @@ export type TextRouteSettings = Pick<
 export type SettingsResponse = TextRouteSettings & {
   dshModel: DshModelRef | null;
   dshCatalog: DshCatalogView;
+  dshConnection: PublicDshConnection;
   accountType: AccountType;
   settingsVisibility: SettingsVisibility;
-  /** 自定义 API 是否经 DSH purge。预设账号进不了设置页。 */
+  /** 恒为 false。旧的「经 DSH purge」开关已从设置页拿掉。 */
   purgeEnabled: boolean;
 };
 

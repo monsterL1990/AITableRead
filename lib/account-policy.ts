@@ -1,9 +1,10 @@
 import { EMPTY_CUSTOM_API, toPublicCustomApi } from "./custom-api";
-import { getDshConfig, readDshModelCatalog } from "./dsh";
+import { getDshConfig, readDshModelCatalog, type DshEnv } from "./dsh";
 import { catalogFromValue, matchDshModel } from "./dsh-catalog";
+import { mergeDshEnv, toPublicDshConnection } from "./dsh-setup";
 import type { StoredSettings } from "./store";
 import { describeTextRoute, publicConfigRouteFields, resolveTextRoute, type RouteEnv } from "./text-route";
-import type { AccountType, CustomApiConfig, DshModelRef, PreferredTextRoute, PublicConfig, SettingsVisibility, TextRoute } from "./types";
+import type { AccountType, CustomApiConfig, DshModelRef, PreferredTextRoute, PublicConfig, SettingsVisibility, StoredDshConnection, TextRoute } from "./types";
 
 export const DEFAULT_PRESET_DSH_MODEL: DshModelRef = { provider: "xai-oauth", model: "grok-4.7" };
 export const DEFAULT_PRESET_DS_MODEL: DshModelRef = { provider: "deepseek-official", model: "deepseek-flash" };
@@ -31,19 +32,22 @@ export type AccountTextRoute = {
   route: TextRoute;
   customApi: CustomApiConfig;
   dshModel: DshModelRef | null;
-  /** 自备 Key 经 DSH 临时 provider。预设账号的强制 DSH 不是这条。 */
+  /** 自备 Key 经 DSH 临时 provider。开源单机版的设置不再打开这条。 */
   ephemeralProvider: boolean;
   /** 预设 DeepSeek 的模型必须先在站点目录里对上，才能 selectModel。 */
   mustMatchCatalog: boolean;
+  /** 这一轮要用的 DSH 环境。稿库连接盖过进程环境。没有保存的连接时可能为空。 */
+  dshEnv?: DshEnv;
 };
 
-export function byokPurgeActive(config: {
+/** 开源单机版不把自备 Key 送进 purge。保留函数是为了旧调用点，结果恒为 false。 */
+export function byokPurgeActive(config?: {
   purgeEnabled?: boolean;
   accountType?: AccountType | null;
   preferredTextRoute?: PreferredTextRoute | null;
 }): boolean {
-  if (config.purgeEnabled !== true || isPresetAccount(config.accountType)) return false;
-  return config.accountType === "custom" || config.preferredTextRoute === "custom";
+  void config;
+  return false;
 }
 
 function envModel(provider: string | undefined, model: string | undefined, fallback: DshModelRef): DshModelRef {
@@ -89,12 +93,13 @@ export function settingsSections(visibility: SettingsVisibility): {
 
 /**
  * 出字实际用的路由。
- * 预设 Grok / 预设 DeepSeek：只经 DSH，模型固定，稿库里的路由、自定义密钥和 purge 开关都不看。
+ * 预设 Grok / 预设 DeepSeek：只经 DSH，模型固定，不看稿库里的路由和自定义密钥。围读不要求 purge。
  * 预设 DeepSeek 的模型还要对上站点目录，这一步在出字前做。
- * 非预设：默认只走自己的自定义 API。purge 开着则仍用这把 Key，但改经 DSH 临时 provider。
- * 站长：稿库里选什么就是什么。选了自定义 API 且 purge 开着时，同样走临时 provider。
+ * 非预设：默认只走自己的自定义 API，直连，不把 Key 送进 DSH。
+ * 站长：稿库里选什么就是什么。选了 DSH 就用稿库里的连接（没有则用环境变量）。
  */
 export function applyAccountTextPolicy(type: AccountType, stored: StoredSettings, env?: PolicyEnv): AccountTextRoute {
+  const routeEnv = mergeDshEnv(stored, env);
   if (isPresetAccount(type)) {
     const dsh = getDshConfig(env);
     if (!dsh.configured) {
@@ -107,19 +112,27 @@ export function applyAccountTextPolicy(type: AccountType, stored: StoredSettings
       dshModel: deepseek ? presetDsModel(env) : presetDshModel(env),
       ephemeralProvider: false,
       mustMatchCatalog: deepseek,
+      dshEnv: env,
     };
   }
-  const purge = stored.purgeEnabled === true;
   if (type === "custom") {
-    return { route: "custom", customApi: { ...stored.customApi }, dshModel: null, ephemeralProvider: purge, mustMatchCatalog: false };
+    return {
+      route: "custom",
+      customApi: { ...stored.customApi },
+      dshModel: null,
+      ephemeralProvider: false,
+      mustMatchCatalog: false,
+      dshEnv: routeEnv,
+    };
   }
-  const route = resolveTextRoute(env, stored.preferredTextRoute);
+  const route = resolveTextRoute(routeEnv, stored.preferredTextRoute);
   return {
     route,
     customApi: { ...stored.customApi },
     dshModel: stored.dshModel ? { ...stored.dshModel } : null,
-    ephemeralProvider: purge && route === "custom",
+    ephemeralProvider: false,
     mustMatchCatalog: false,
+    dshEnv: routeEnv,
   };
 }
 
@@ -153,51 +166,46 @@ type SettingsPatch = {
   preferredTextRoute?: PreferredTextRoute;
   customApi?: CustomApiConfig;
   dshModel?: DshModelRef | null;
+  dsh?: StoredDshConnection;
   purgeEnabled?: boolean;
 };
+
+const PURGE_NOT_REQUIRED = "围读不要求 purge。插件要在你自己的 DSH 上安装。";
 
 export function settingsWrite(
   type: AccountType,
   patch: SettingsPatch,
 ): { ok: true; patch: SettingsPatch } | { ok: false; status: number; error: string } {
   if (isPresetAccount(type)) return { ok: false, status: 403, error: "预设账号不能改出字设置。" };
+  const rest: SettingsPatch = { ...patch };
+  delete rest.purgeEnabled;
+  const hasWork = Boolean(rest.preferredTextRoute || rest.customApi || rest.dshModel !== undefined || rest.dsh);
+  if (patch.purgeEnabled !== undefined && !hasWork) return { ok: false, status: 400, error: PURGE_NOT_REQUIRED };
   if (type === "custom") {
-    if (patch.preferredTextRoute && patch.preferredTextRoute !== "custom") {
+    if (rest.dsh) return { ok: false, status: 400, error: "这个账号不连接 DSH。" };
+    if (rest.preferredTextRoute && rest.preferredTextRoute !== "custom") {
       return { ok: false, status: 400, error: "这个账号只能使用自定义 API，不能改经 DSH 或环境里的 OpenAI 兼容接口。" };
     }
-    if (patch.dshModel !== undefined) return { ok: false, status: 400, error: "这个账号不经 DSH，不能改模型。" };
-    if (!patch.customApi && !patch.preferredTextRoute && patch.purgeEnabled === undefined) {
-      return { ok: false, status: 400, error: "没有要保存的设置。" };
-    }
+    if (rest.dshModel !== undefined) return { ok: false, status: 400, error: "这个账号不经 DSH，不能改模型。" };
+    if (!rest.customApi && !rest.preferredTextRoute) return { ok: false, status: 400, error: "没有要保存的设置。" };
     return {
       ok: true,
       patch: {
         preferredTextRoute: "custom",
         dshModel: null,
-        ...(patch.customApi ? { customApi: patch.customApi } : {}),
-        ...(patch.purgeEnabled !== undefined ? { purgeEnabled: patch.purgeEnabled } : {}),
+        ...(rest.customApi ? { customApi: rest.customApi } : {}),
       },
     };
   }
   const next: SettingsPatch = {};
-  if (patch.preferredTextRoute) next.preferredTextRoute = patch.preferredTextRoute;
-  if (patch.customApi) next.customApi = patch.customApi;
-  if (patch.dshModel !== undefined) next.dshModel = patch.dshModel;
-  if (patch.purgeEnabled !== undefined) next.purgeEnabled = patch.purgeEnabled;
+  if (rest.preferredTextRoute) next.preferredTextRoute = rest.preferredTextRoute;
+  if (rest.customApi) next.customApi = rest.customApi;
+  if (rest.dshModel !== undefined) next.dshModel = rest.dshModel;
+  if (rest.dsh) next.dsh = rest.dsh;
+  if (!next.preferredTextRoute && !next.customApi && next.dshModel === undefined && !next.dsh) {
+    return { ok: false, status: 400, error: "没有要保存的设置。" };
+  }
   return { ok: true, patch: next };
-}
-
-function byokNote(baseNote: string, purge: boolean, customConfigured: boolean, dsh: { configured: boolean; missing: string[] }): string {
-  if (!purge) return baseNote;
-  if (!customConfigured) {
-    const extra = "已打开经 DSH purge，也不会改成直连。";
-    return baseNote.includes(extra) ? baseNote : `${baseNote} ${extra}`.trim();
-  }
-  if (!dsh.configured) {
-    const why = dsh.missing.length > 0 && dsh.missing.length < 3 ? `未配齐 DSH（缺 ${dsh.missing.join("、")}）` : "未配齐 DSH";
-    return `已打开经 DSH purge，但${why}。这次不会改成直连，也不会换成演示稿。`;
-  }
-  return "";
 }
 
 /** `/api/config` 按账号类型说明出字。预设不带自定义密钥，也不给设置入口。 */
@@ -228,28 +236,26 @@ export function publicConfigForAccount(
       settingsVisibility: "hidden",
     };
   }
+  const routeEnv = mergeDshEnv(stored, env);
   if (type === "custom") {
-    const described = describeTextRoute(env, "custom", stored.customApi);
-    const dsh = getDshConfig(env);
-    const config = publicConfigRouteFields(env, "custom", extras, stored.customApi, null);
+    const described = describeTextRoute(routeEnv, "custom", stored.customApi);
+    const config = publicConfigRouteFields(routeEnv, "custom", extras, stored.customApi, null);
     return {
       ...config,
       textRoute: described.textRoute,
       preferredTextRoute: "custom",
-      textRouteNote: byokNote(described.textRouteNote, stored.purgeEnabled === true, described.customApi.configured, dsh),
+      textRouteNote: described.textRouteNote,
       dshModel: null,
-      purgeEnabled: stored.purgeEnabled === true,
+      purgeEnabled: false,
       accountType: "custom",
       settingsVisibility: "custom-only",
     };
   }
-  const described = describeTextRoute(env, stored.preferredTextRoute, stored.customApi);
-  const dsh = getDshConfig(env);
-  const purge = stored.purgeEnabled === true && described.preferredTextRoute === "custom";
+  const described = describeTextRoute(routeEnv, stored.preferredTextRoute, stored.customApi);
   return {
-    ...publicConfigRouteFields(env, stored.preferredTextRoute, extras, stored.customApi, stored.dshModel),
-    textRouteNote: byokNote(described.textRouteNote, purge, described.customApi.configured, dsh),
-    purgeEnabled: stored.purgeEnabled === true,
+    ...publicConfigRouteFields(routeEnv, stored.preferredTextRoute, extras, stored.customApi, stored.dshModel),
+    textRouteNote: described.textRouteNote,
+    purgeEnabled: false,
     accountType: "owner",
     settingsVisibility: "full",
   };
@@ -266,6 +272,7 @@ export function accountSettingsFields(type: "owner" | "custom", stored: StoredSe
     textRouteNote: config.textRouteNote,
     customApi: config.customApi,
     dshModel: config.dshModel,
-    purgeEnabled: config.purgeEnabled === true,
+    dshConnection: toPublicDshConnection(stored.dsh),
+    purgeEnabled: false,
   };
 }

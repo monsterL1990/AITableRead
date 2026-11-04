@@ -292,6 +292,7 @@ async function produceText(args: {
     return promptDshSession(
       { system: built.system, user: built.user },
       {
+        env: active.dshEnv,
         ephemeralCredential: plan.credential,
         signal,
         sleep: (ms) => sleep(ms, signal),
@@ -309,6 +310,7 @@ async function produceText(args: {
     return promptDshSession(
       { system: built.system, user: built.user },
       {
+        env: active.dshEnv,
         model: active.dshModel,
         signal,
         sleep: (ms) => sleep(ms, signal),

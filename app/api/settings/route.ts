@@ -2,10 +2,11 @@ import { accountSettingsFields, isPresetAccount, settingsVisibility, settingsWri
 import { errorJson, isResponse, readJson, requireUser } from "@/lib/api";
 import { customSelectionError, parseCustomApiPatch } from "@/lib/custom-api";
 import { catalogFromValue, emptyDshCatalog, matchDshModel } from "@/lib/dsh-catalog";
-import { getDshConfig, readDshModelCatalog } from "@/lib/dsh";
+import { getDshConfig, inspectDshConnection, readDshModelCatalog, type DshEnv } from "@/lib/dsh";
+import { emptyDshConnection, mergeDshEnv, parseDshConnectionPatch } from "@/lib/dsh-setup";
 import { getSettings, updateTextSettings } from "@/lib/store";
 import { parsePreferredTextRoute } from "@/lib/text-route";
-import type { CustomApiConfig, DshCatalogView, DshModelRef, PreferredTextRoute, SettingsVisibility } from "@/lib/types";
+import type { CustomApiConfig, DshCatalogView, DshModelRef, PreferredTextRoute, SettingsVisibility, StoredDshConnection } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,10 +15,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-async function loadDshCatalog(): Promise<DshCatalogView> {
-  if (!getDshConfig().configured) return emptyDshCatalog("未配齐 DSH，不能拉模型目录。");
+async function loadDshCatalog(env?: DshEnv): Promise<DshCatalogView> {
+  if (!getDshConfig(env).configured) return emptyDshCatalog("未配齐 DSH，不能拉模型目录。");
   try {
-    return catalogFromValue(await readDshModelCatalog());
+    return catalogFromValue(await readDshModelCatalog({ env }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "模型目录没拉下来。";
     return emptyDshCatalog(message);
@@ -42,10 +43,9 @@ export async function GET() {
     const stored = await getSettings(user.uid);
     const described = accountSettingsFields(user.type === "custom" ? "custom" : "owner", stored);
     if (user.type === "custom") {
-      const note = stored.purgeEnabled ? "自备 Key 不从站点模型目录里选。" : "这个账号不经 DSH。";
-      return Response.json(settingsBody(described, emptyDshCatalog(note), "custom", visibility));
+      return Response.json(settingsBody(described, emptyDshCatalog("这个账号不经 DSH。"), "custom", visibility));
     }
-    const dshCatalog = await loadDshCatalog();
+    const dshCatalog = await loadDshCatalog(mergeDshEnv(stored));
     return Response.json(settingsBody(described, dshCatalog, "owner", visibility));
   } catch {
     return errorJson("稿库读不出来，请检查 data/store.json。", 500);
@@ -62,10 +62,12 @@ export async function PATCH(request: Request) {
   const hasRoute = "preferredTextRoute" in body;
   const hasCustom = "customApi" in body;
   const hasDshModel = "dshModel" in body;
+  const hasDsh = "dsh" in body;
   const hasPurge = "purgeEnabled" in body;
-  if (!hasRoute && !hasCustom && !hasDshModel && !hasPurge) return errorJson("没有要保存的设置。", 400);
-  if (hasPurge && typeof body.purgeEnabled !== "boolean") return errorJson("「经 DSH purge」只能打开或关掉。", 400);
+  if (!hasRoute && !hasCustom && !hasDshModel && !hasDsh && !hasPurge) return errorJson("没有要保存的设置。", 400);
+  if (hasPurge && typeof body.purgeEnabled !== "boolean") return errorJson("请求格式不对。", 400);
   if (user.type === "custom" && hasDshModel) return errorJson("这个账号不经 DSH，不能改模型。", 400);
+  if (user.type === "custom" && hasDsh) return errorJson("这个账号不连接 DSH。", 400);
   if (user.type === "custom" && hasRoute && body.preferredTextRoute !== "custom") {
     return errorJson("这个账号只能使用自定义 API，不能改经 DSH 或环境里的 OpenAI 兼容接口。", 400);
   }
@@ -77,9 +79,41 @@ export async function PATCH(request: Request) {
     return errorJson("稿库读不出来，请检查 data/store.json。", 500);
   }
 
+  let dshConnection: StoredDshConnection | undefined;
+  let inspectedCatalog: DshCatalogView | null = null;
+  if (hasDsh && user.type === "owner") {
+    const parsed = parseDshConnectionPatch(body.dsh, current.dsh ?? emptyDshConnection());
+    if (!parsed.ok) return errorJson(parsed.error, 400);
+    let inspected;
+    try {
+      const signal = AbortSignal.timeout(8_000);
+      inspected = await inspectDshConnection(
+        {
+          baseUrl: parsed.connection.baseUrl,
+          token: parsed.connection.token,
+          basicUser: parsed.connection.basicUser,
+          basicPassword: parsed.connection.basicPassword,
+        },
+        { signal },
+      );
+    } catch (error) {
+      const aborted = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      const message = aborted ? "连接测试超时，没有一直等下去。" : error instanceof Error ? error.message : "连不上这台 DSH。";
+      return errorJson(message, 400);
+    }
+    if (!inspected.sessions.some((item) => item.sessionId === parsed.connection.sessionId)) {
+      return errorJson("这台 DSH 上没有这个会话。请重新测试连接后再选。", 400);
+    }
+    dshConnection = parsed.connection;
+    inspectedCatalog = inspected.catalog;
+  }
+
+  const pending = dshConnection ? { ...current, dsh: dshConnection } : current;
+  const dshReady = getDshConfig(mergeDshEnv(pending)).configured;
+
   let route: PreferredTextRoute | undefined;
   if (hasRoute) {
-    const parsed = parsePreferredTextRoute(body.preferredTextRoute, getDshConfig().configured);
+    const parsed = parsePreferredTextRoute(body.preferredTextRoute, dshReady);
     if (!parsed.ok) return errorJson(parsed.error, 400);
     route = parsed.route;
   }
@@ -96,7 +130,7 @@ export async function PATCH(request: Request) {
     if (body.dshModel === null) {
       dshModel = null;
     } else {
-      const catalog = await loadDshCatalog();
+      const catalog = inspectedCatalog ?? (await loadDshCatalog(mergeDshEnv(pending)));
       if (!catalog.loaded) return errorJson(catalog.error || "模型目录没拉下来，这次不能改 DSH 模型。", 400);
       const parsed = matchDshModel(body.dshModel, catalog.options);
       if (!parsed.ok) return errorJson(parsed.error, 400);
@@ -108,6 +142,7 @@ export async function PATCH(request: Request) {
     ...(route ? { preferredTextRoute: route } : {}),
     ...(customApi ? { customApi } : {}),
     ...(hasDshModel ? { dshModel: dshModel ?? null } : {}),
+    ...(dshConnection ? { dsh: dshConnection } : {}),
     ...(hasPurge ? { purgeEnabled: body.purgeEnabled === true } : {}),
   });
   if (!decision.ok) return errorJson(decision.error, decision.status);
@@ -128,10 +163,9 @@ export async function PATCH(request: Request) {
     const visibility = settingsVisibility(user.type);
     const described = accountSettingsFields(user.type === "custom" ? "custom" : "owner", saved);
     if (user.type === "custom") {
-      const note = saved.purgeEnabled ? "自备 Key 不从站点模型目录里选。" : "这个账号不经 DSH。";
-      return Response.json(settingsBody(described, emptyDshCatalog(note), "custom", visibility));
+      return Response.json(settingsBody(described, emptyDshCatalog("这个账号不经 DSH。"), "custom", visibility));
     }
-    const dshCatalog = await loadDshCatalog();
+    const dshCatalog = inspectedCatalog ?? (await loadDshCatalog(mergeDshEnv(saved)));
     return Response.json(settingsBody(described, dshCatalog, "owner", visibility));
   } catch {
     return errorJson("出字路由没能保存。", 500);
