@@ -15,6 +15,7 @@ RUN npm run build
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
+# Login stays on unless the operator sets WEIDU_AUTH=off.
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000

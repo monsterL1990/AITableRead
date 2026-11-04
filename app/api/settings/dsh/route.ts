@@ -1,7 +1,7 @@
 import { isPresetAccount } from "@/lib/account-policy";
 import { errorJson, isResponse, readJson, requireUser } from "@/lib/api";
 import { inspectDshConnection } from "@/lib/dsh";
-import { DSH_CONNECT_TIMEOUT_MS, parseDshBrowserUrl, parseProbePorts, probeLocalDshPorts, probePortsFromEnv } from "@/lib/dsh-setup";
+import { DSH_CONNECT_TIMEOUT_MS, parseDshBrowserUrl, parseProbePorts, probeLocalDshPorts, probePortsFromEnv, readDshTokenInput } from "@/lib/dsh-setup";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,12 +35,14 @@ async function probe(body: Record<string, unknown>) {
 }
 
 async function testConnection(body: Record<string, unknown>) {
-  const parsed = parseDshBrowserUrl(typeof body.baseUrl === "string" ? body.baseUrl : "");
+  const read = readDshTokenInput(typeof body.token === "string" ? body.token : "");
+  const baseSource = typeof body.baseUrl === "string" && body.baseUrl.trim() ? body.baseUrl : read.baseUrl;
+  const parsed = parseDshBrowserUrl(baseSource);
   if (!parsed.ok) return errorJson(parsed.error, 400);
   if (parsed.basicUser || parsed.basicPassword) {
     return errorJson("地址里不要写用户名和密码，请填到 Basic Auth。", 400);
   }
-  const token = typeof body.token === "string" ? body.token.trim() : "";
+  const token = read.token;
   if (!token) return errorJson("要填写 DSH 令牌。", 400);
   const basicUser = typeof body.basicUser === "string" ? body.basicUser.trim() : "";
   const basicPassword = typeof body.basicPassword === "string" ? body.basicPassword : "";

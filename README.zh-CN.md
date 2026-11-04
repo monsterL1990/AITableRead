@@ -4,7 +4,7 @@
 
 这一版按**一个人、一台机器**来用。推荐接你自己的 OpenAI 兼容接口：写在 `.env` 的 `OPENAI_BASE_URL` 和 `OPENAI_API_KEY`，或在设置里保存「自定义 OpenAI 兼容接口」。两项都空着时页面仍会打开，并提示「请先配置 API」，生成停在可编辑的演示稿，不会崩溃。
 
-自建 DSH 不是默认。设置里的「连接 DSH」向导分四步：有没有自己的 DSH、粘贴浏览器地址、填写令牌（需要时再填 Basic Auth）并测试连接、选择会话和模型。也可以把 `DSH_BASE_URL`、`DSH_TOKEN`、`DSH_SESSION_ID` 写在 `.env`，向导保存的连接优先。插件要你自己装在那台 DSH 上，围读不要求 purge，也不附带插件。若 DSH 已配齐、设置里又没选过路由，出字仍会先走 DSH。
+自建 DSH 不是默认。设置里的「连接 DSH」向导分四步：有没有自己的 DSH、粘贴浏览器地址、填写启动令牌（需要时再填 Basic Auth）并测试连接、选择会话和模型。令牌不是模型的 API Key，是终端里 `npx @deepseek-ai/dsh web` 印出的 `dsh web: http://127.0.0.1:3080/?token=…` 里 `token=` 的值，每次启动都会变。探测端口默认是 `3080,3081,3099`。也可以把 `DSH_BASE_URL`、`DSH_TOKEN`、`DSH_SESSION_ID` 写在 `.env`，向导保存的连接优先。插件要你自己装在那台 DSH 上，围读不要求 purge，也不附带插件。若 DSH 已配齐、设置里又没选过路由，出字仍会先走 DSH。
 
 ## Windows：双击启动
 
@@ -13,7 +13,7 @@
 
 脚本会检查 Node。没装、或不是可用的 LTS 时，窗口会留下说明，不会一闪而过。没有 `.env` 时会从 `.env.example` 复制一份。需要时执行 `npm install`。然后启动和 `npm run dev` 相同的服务，并打开 http://127.0.0.1:4721 。
 
-用账号 `local` 登录。刚复制的 `.env` 里口令是 `replace-with-a-password`，改 `APP_PASSWORD` 即可。开发环境把两个口令都清空时才是 `changeme`，生产环境不会退回这个口令。
+本机打开即用，没有登录页。只听 `127.0.0.1`。要口令时在 `.env` 里设 `WEIDU_AUTH=on`，口令是 `APP_PASSWORD`（刚复制的文件里是 `replace-with-a-password`）。开发环境把两个口令都清空、又开了登录时才是 `changeme`。`npm run start` 和 Docker 是生产环境，登录默认开着，除非明确写 `WEIDU_AUTH=off`。关了登录又让别的机器能访问，稿子就暴露了。
 
 `start.ps1` 是同一套步骤。不想自动开浏览器时设置 `WEIDU_NO_BROWSER=1`。
 
@@ -42,4 +42,4 @@ npm run dev
 
 英文说明、校验方法和许可证见 [README.md](README.md) 与 [LICENSE](LICENSE)（MIT，copyright 2026 monsterL1990）。
 
-账号页和预设 Grok / 预设 DeepSeek 还留在代码里，不是本机的默认用法。设置里原先叫「CLIProxy」的那一条，现在是「OpenAI 兼容接口（.env，推荐）」，不是要另装的代理。
+账号页要 `WEIDU_AUTH=on` 才工作。没开时打开 `/admin` 只会看到说明，接口也不会建账号。预设 Grok / 预设 DeepSeek 仍留在那一页的代码里，不是本机的默认用法。设置里原先叫「CLIProxy」的那一条，现在是「OpenAI 兼容接口（.env，推荐）」，不是要另装的代理。

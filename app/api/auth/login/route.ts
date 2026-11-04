@@ -1,5 +1,6 @@
 import { loginWithPassword } from "@/lib/accounts";
-import { errorJson, readJson } from "@/lib/api";
+import { AUTH_OFF_MESSAGE, errorJson, readJson } from "@/lib/api";
+import { authEnabled } from "@/lib/auth-mode";
 import { writeSessionCookie } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ function limited(key: string): boolean {
 }
 
 export async function POST(request: Request) {
+  if (!authEnabled()) return errorJson(AUTH_OFF_MESSAGE, 403);
   const key = clientKey(request);
   if (limited(key)) return errorJson("试得太勤，请过几分钟再来。", 429);
 

@@ -1,6 +1,8 @@
 # Single machine. Compose reads a local .env for the ${...} values below.
 # Copy .env.example to .env and replace the password placeholders.
 # This file does not join a private network and does not set a model host.
+# The image sets NODE_ENV=production, so login stays on unless WEIDU_AUTH=off.
+# WEIDU_AUTH=off on this published port lets anyone who can reach it open the desk.
 
 services:
   weidu:
@@ -14,6 +16,7 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
+      WEIDU_AUTH: ${WEIDU_AUTH:-}
       APP_PASSWORD: ${APP_PASSWORD:-}
       AUTH_PASSWORD: ${AUTH_PASSWORD:-}
       APP_SESSION_SECRET: ${APP_SESSION_SECRET:-}

@@ -1,5 +1,6 @@
 import { settingsVisibility } from "@/lib/account-policy";
 import { isResponse, requireUser } from "@/lib/api";
+import { authEnabled } from "@/lib/auth-mode";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,5 +13,6 @@ export async function GET() {
     display: user.display,
     type: user.type,
     settingsVisibility: settingsVisibility(user.type),
+    authEnabled: authEnabled(),
   });
 }

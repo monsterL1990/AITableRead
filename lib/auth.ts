@@ -1,7 +1,10 @@
 import { cookies } from "next/headers";
+import { authEnabled } from "./auth-mode";
 import { COOKIE_NAME, createSessionToken, SESSION_MAX_AGE, verifySessionToken, type Session } from "./session";
+import { LOCAL_USER_ID } from "./types";
 
 export async function getSession(): Promise<Session | null> {
+  if (!authEnabled()) return { uid: LOCAL_USER_ID, credentialVersion: 0 };
   const jar = await cookies();
   return verifySessionToken(jar.get(COOKIE_NAME)?.value);
 }

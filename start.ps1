@@ -25,7 +25,7 @@ if (-not (Test-Path -LiteralPath ".env")) {
   Copy-Item -LiteralPath ".env.example" -Destination ".env"
   Write-Host "Created .env from .env.example."
   Write-Host "Empty OPENAI_BASE_URL and OPENAI_API_KEY are fine. The page will ask you to configure an API."
-  Write-Host "Sign in as local. The password in that file is replace-with-a-password until you change APP_PASSWORD."
+  Write-Host "No login on this machine. Set WEIDU_AUTH=on in .env only if you want APP_PASSWORD."
 }
 
 $needInstall = -not (Test-Path -LiteralPath "node_modules\next\package.json")

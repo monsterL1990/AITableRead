@@ -3,12 +3,16 @@ import type { DshEnv } from "./dsh";
 import type { PublicDshConnection, StoredDshConnection } from "./types";
 
 /** 向导里「探测常见本机端口」的默认端口。可用 DSH_PROBE_PORTS 覆盖，不指向任何现成站点。 */
-export const DEFAULT_DSH_PROBE_PORTS = [3081, 3099] as const;
+/** `dsh web` listens on 3080 unless told otherwise. 3081 and 3099 stay for older local setups. */
+export const DEFAULT_DSH_PROBE_PORTS = [3080, 3081, 3099] as const;
 
 export const DSH_PROBE_TIMEOUT_MS = 800;
 export const DSH_CONNECT_TIMEOUT_MS = 8_000;
 
 export const DSH_PLUGIN_NOTE = "插件要你在自己的 DSH 里安装。围读不要求 purge，也不会替你装插件。";
+
+export const DSH_TOKEN_HELP =
+  "不是模型的 API Key。终端里 npx @deepseek-ai/dsh web 会印出 dsh web: http://127.0.0.1:3080/?token=…，填 token= 后面的值，或把整段地址贴进来。每次重新启动都会变；终端关了要再开一次。";
 
 export const EMPTY_DSH_CONNECTION: StoredDshConnection = {
   baseUrl: "",
@@ -24,6 +28,28 @@ const MAX_SESSION = 200;
 const MAX_BASIC_USER = 200;
 const MAX_BASIC_PASSWORD = 500;
 const MAX_PROBE_PORTS = 8;
+
+/**
+ * A plain token stays a token. A `dsh web` launch URL (`http://127.0.0.1:3080/?token=…`)
+ * yields that token and the origin. The prefix `dsh web:` is ignored.
+ */
+export function readDshTokenInput(input: string): { token: string; baseUrl: string } {
+  const trimmed = input.trim();
+  if (!trimmed) return { token: "", baseUrl: "" };
+  const embedded = trimmed.match(/https?:\/\/[^\s]+/i);
+  const candidate = (embedded ? embedded[0] : trimmed).replace(/[),.;]+$/, "");
+  const looksLikeUrl = /^https?:\/\//i.test(candidate) || /[?&]token=/.test(candidate);
+  if (!looksLikeUrl) return { token: trimmed, baseUrl: "" };
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(candidate) ? candidate : `http://${candidate}`;
+  try {
+    const url = new URL(withScheme);
+    const token = url.searchParams.get("token")?.trim() ?? "";
+    if (!token || !url.hostname) return { token: trimmed, baseUrl: "" };
+    return { token, baseUrl: url.origin };
+  } catch {
+    return { token: trimmed, baseUrl: "" };
+  }
+}
 
 export function emptyDshConnection(): StoredDshConnection {
   return { ...EMPTY_DSH_CONNECTION };
@@ -107,7 +133,8 @@ export function parseDshConnectionPatch(
   if (parsed.basicUser || parsed.basicPassword) {
     return { ok: false, error: "地址里不要写用户名和密码，请填到 Basic Auth。" };
   }
-  const tokenInput = typeof raw.token === "string" ? raw.token.trim() : "";
+  const tokenRead = readDshTokenInput(typeof raw.token === "string" ? raw.token : "");
+  const tokenInput = tokenRead.token;
   if (tokenInput && (tokenInput.length > MAX_TOKEN || /[\r\n]/.test(tokenInput))) {
     return { ok: false, error: "令牌格式不对。" };
   }
