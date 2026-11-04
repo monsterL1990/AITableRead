@@ -1,7 +1,6 @@
 /* Packaged screenshots are already static files under public/docs-assets. */
-/* eslint-disable @next/next/no-img-element */
-import Link from "next/link";
-import { DocsZoomImage } from "@/components/docs-zoom-image";
+import { DocsPager } from "@/components/docs-shell";
+import { DocsCover, DocsZoomImage } from "@/components/docs-zoom-image";
 import { DOCS_NAV, docBySlug, type DocSlug } from "@/lib/docs-nav";
 import { loadDocMarkdown, parseDocsMarkdown, type Inline } from "@/lib/docs";
 
@@ -28,11 +27,7 @@ export function DocsArticle({ slug }: { slug: DocSlug }) {
     <article className="sheet rounded-lg border border-border px-5 py-7 sm:px-10 sm:py-9">
       {doc.showCover ? (
         <figure className="mb-8">
-          <img
-            src="/docs-assets/cover.png"
-            alt="围读封面"
-            className="h-auto w-full rounded-md border border-border"
-          />
+          <DocsCover />
         </figure>
       ) : null}
       {blocks.map((block, index) => {
@@ -82,20 +77,7 @@ export function DocsArticle({ slug }: { slug: DocSlug }) {
         }
         return null;
       })}
-      <nav className="mt-12 flex items-stretch justify-between gap-3 border-t border-border pt-5 text-sm" aria-label="前后文">
-        {previous ? (
-          <Link href={previous.href} className="text-primary hover:underline">
-            上一篇 · {previous.label}
-          </Link>
-        ) : (
-          <span />
-        )}
-        {next ? (
-          <Link href={next.href} className="text-primary hover:underline">
-            下一篇 · {next.label}
-          </Link>
-        ) : null}
-      </nav>
+      <DocsPager previous={previous} next={next} />
     </article>
   );
 }

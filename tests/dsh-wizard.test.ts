@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DshWizard } from "../components/dsh-wizard";
 import { dshRouteDetail } from "../components/settings-desk";
 import { complianceNoteForRoute } from "../lib/compliance";
+import { translate } from "../lib/i18n/translate";
 import { projectToMarkdown } from "../lib/markdown";
 import { createProjectRecord } from "../lib/pipeline";
 import {
@@ -218,7 +219,6 @@ test("saved state, reconnect, and export notes do not show the session id", () =
   assert.equal(desk.includes("dshConnection.sessionId"), false);
   assert.equal(wizardSource.includes("{dedicatedSessionId}"), false);
   assert.equal(wizardSource.includes("${item.title} · ${item.sessionId}"), false);
-  assert.match(wizardSource, /围读会自己建会话/);
   assert.match(wizardSource, /dshAdvancedSummary/);
   const wizard = renderToStaticMarkup(
     createElement(DshWizard, {
@@ -229,6 +229,7 @@ test("saved state, reconnect, and export notes do not show the session id", () =
   );
   assert.equal(wizard.includes(id), false);
   assert.match(wizard, /模型和专用会话/);
+  assert.match(translate("zh", "wizard.needTest"), /围读会自己建会话/);
   const project = createProjectRecord({ id: "p-dsh", ownerId: "local", title: "稿", idea: "想法" });
   const markdown = projectToMarkdown(project, "full", { textRoute: "dsh", dshConfigured: true });
   assert.match(markdown, /出字经 DSH/);

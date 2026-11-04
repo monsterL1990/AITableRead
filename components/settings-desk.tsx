@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useI18n } from "@/components/locale-provider";
 import { DshWizard } from "@/components/dsh-wizard";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { settingsSections } from "@/lib/account-policy";
 import { DEEPSEEK_MODEL_SUGGESTIONS, DEEPSEEK_OPENAI_BASE_URL, DEEPSEEK_PRESET_MODEL } from "@/lib/custom-api";
-import { DSH_PLUGIN_NOTE, dshReconnectNotice, dshSavedSummary } from "@/lib/dsh-setup";
+import { dshReconnectNotice, dshSavedSummary } from "@/lib/dsh-setup";
 import { routeMark } from "@/lib/format";
 import type { DshCatalogOption, PreferredTextRoute, SettingsResponse, SettingsVisibility } from "@/lib/types";
 
@@ -52,6 +53,7 @@ export function SettingsDesk({
   /** 测试可传入已载入的设置。页面不传，仍从 /api/settings 读。 */
   initialView?: SettingsResponse | null;
 }) {
+  const { t, show, join } = useI18n();
   const sections = settingsSections(visibility);
   const router = useRouter();
   const [view, setView] = useState<SettingsResponse | null>(initialView);
@@ -75,7 +77,7 @@ export function SettingsDesk({
           router.replace("/login");
           return;
         }
-        if (!response.ok) throw new Error("设置没有载入。");
+        if (!response.ok) throw new Error("settings.loadFailed");
         const body = (await response.json()) as SettingsResponse;
         if (!cancelled) {
           setView(body);
@@ -83,7 +85,7 @@ export function SettingsDesk({
           setModel(body.customApi.model);
         }
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "设置没有载入。");
+        if (!cancelled) setError(loadError instanceof Error ? show(loadError.message) : t("settings.loadFailed"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -91,6 +93,8 @@ export function SettingsDesk({
     return () => {
       cancelled = true;
     };
+    // Language helpers are closed over for this load only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   async function sendPatch(body: Record<string, unknown>, success: string) {
@@ -105,7 +109,7 @@ export function SettingsDesk({
     }
     const data = (await response.json().catch(() => ({}))) as SettingsResponse & { error?: string };
     if (!response.ok || !data.textRoute || !data.preferredTextRoute || !data.customApi || !data.dshCatalog) {
-      toast.error(data.error || "没能保存出字路由。");
+      toast.error(data.error ? show(data.error) : t("settings.routeFailed"));
       return false;
     }
     if ("customApi" in body) {
@@ -114,7 +118,7 @@ export function SettingsDesk({
       setModel(data.customApi.model);
     }
     setView(data);
-    toast.success(success);
+    toast.success(show(success));
     return true;
   }
 
@@ -129,9 +133,9 @@ export function SettingsDesk({
     if ((view.dshModel?.provider ?? "") === (next?.provider ?? "") && (view.dshModel?.model ?? "") === (next?.model ?? "")) return;
     setSaving(true);
     try {
-      await sendPatch({ dshModel: next }, next ? `经 DSH 时改用 ${next.provider} / ${next.model}。` : "经 DSH 时改回内核默认。");
+      await sendPatch({ dshModel: next }, next ? t("settings.modelSet", { model: `${next.provider} / ${next.model}` }) : t("settings.modelReset"));
     } catch {
-      toast.error("DSH 模型没能保存。");
+      toast.error(t("settings.modelFailed"));
     } finally {
       setSaving(false);
     }
@@ -148,7 +152,7 @@ export function SettingsDesk({
     try {
       await sendPatch({ preferredTextRoute: next }, savedRouteLabel(next));
     } catch {
-      toast.error("没能保存出字路由。");
+      toast.error(t("settings.routeFailed"));
     } finally {
       setPending(null);
       setSaving(false);
@@ -170,16 +174,16 @@ export function SettingsDesk({
       }
       const data = (await response.json().catch(() => ({}))) as SettingsResponse & { error?: string; replaced?: boolean };
       if (!response.ok || !data.textRoute || !data.preferredTextRoute || !data.customApi || !data.dshCatalog) {
-        toast.error(data.error || "没能重新连接 DSH。");
+        toast.error(data.error ? show(data.error) : t("settings.reconnectFailed"));
         return;
       }
       setView(data);
       setBaseUrl(data.customApi.baseUrl);
       setModel(data.customApi.model);
       setApiKey("");
-      toast.success(dshReconnectNotice(data.replaced === true));
+      toast.success(show(dshReconnectNotice(data.replaced === true)));
     } catch {
-      toast.error("没能重新连接 DSH。");
+      toast.error(t("settings.reconnectFailed"));
     } finally {
       setReconnecting(false);
     }
@@ -198,10 +202,10 @@ export function SettingsDesk({
         customApi: { baseUrl, model, apiKey },
       };
       if (useForRoute) body.preferredTextRoute = "custom";
-      const success = useForRoute ? "已保存自定义 API，出字改走这条。" : "已保存自定义 API。";
+      const success = useForRoute ? t("settings.customSavedUse") : t("settings.customSaved");
       await sendPatch(body, success);
     } catch {
-      toast.error("自定义 API 没能保存。");
+      toast.error(t("settings.customFailed"));
     } finally {
       setSavingApi(false);
     }
@@ -213,10 +217,10 @@ export function SettingsDesk({
     try {
       await sendPatch(
         { customApi: { baseUrl, model, apiKey: "", clearApiKey: true } },
-        "已清除自定义 API 的密钥。",
+        t("settings.keyCleared"),
       );
     } catch {
-      toast.error("密钥没能清除。");
+      toast.error(t("settings.keyClearFailed"));
     } finally {
       setSavingApi(false);
     }
@@ -234,10 +238,10 @@ export function SettingsDesk({
     <Shell>
       <div className="mx-auto max-w-2xl space-y-5">
         <div>
-          <h1 className="text-2xl font-medium">设置</h1>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{settingsIntro(visibility)}</p>
+          <h1 className="text-2xl font-medium">{t("settings.title")}</h1>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{show(settingsIntro(visibility))}</p>
         </div>
-        {loading ? <p className="text-sm text-muted-foreground">正在读取设置…</p> : null}
+        {loading ? <p className="text-sm text-muted-foreground">{t("settings.loading")}</p> : null}
         {error ? (
           <div className="sheet rounded-lg border border-border px-4 py-5">
             <p className="text-sm">{error}</p>
@@ -245,12 +249,10 @@ export function SettingsDesk({
         ) : null}
         {view && sections.showRoutePicker ? (
           <section className="sheet rounded-lg border border-border px-4 py-4">
-            <h2 className="text-base font-medium">出字路由</h2>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              默认走 OpenAI 兼容接口：.env 里的地址和密钥，或下面保存的自定义接口。自定义接口直连。经 DSH 更慢，只有你自己连上了才选。这条选择管大纲、初稿、润色、读者审、结构质检、按意见改稿，以及按需求生成读者。没在这里选过、并且 DSH 已连上时，出字仍会先走 DSH。{DSH_PLUGIN_NOTE}
-            </p>
+            <h2 className="text-base font-medium">{t("settings.routeTitle")}</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("settings.routeIntro")}</p>
             <fieldset className="mt-4 space-y-2" disabled={busy}>
-              <legend className="sr-only">出字路由</legend>
+              <legend className="sr-only">{t("settings.routeTitle")}</legend>
               <label
                 className={`flex cursor-pointer gap-3 rounded-lg border px-3 py-3 ${selected === "cliproxy" ? "border-primary bg-accent/60" : "border-border"}`}
               >
@@ -264,10 +266,8 @@ export function SettingsDesk({
                   onChange={() => void choose("cliproxy")}
                 />
                 <span>
-                  <span className="font-medium">OpenAI 兼容接口（.env，推荐）</span>
-                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                    读取 OPENAI_BASE_URL、OPENAI_API_KEY 和 OPENAI_MODEL。不经 DSH，也不经 purge。以前这条显示成 CLIProxy，它不是要另外安装的代理。
-                  </span>
+                  <span className="font-medium">{t("settings.cliproxyTitle")}</span>
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">{t("settings.cliproxyBody")}</span>
                 </span>
               </label>
               <label
@@ -283,14 +283,12 @@ export function SettingsDesk({
                   onChange={() => void choose("custom")}
                 />
                 <span>
-                  <span className="font-medium">自定义 OpenAI 兼容接口</span>
+                  <span className="font-medium">{t("settings.customTitle")}</span>
                   {view.customApi.configured ? (
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                      直连你保存在稿库里的接口，例如 DeepSeek。不经 DSH，也不经 purge。
-                    </span>
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{t("settings.customReady")}</span>
                   ) : (
                     <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                      还没填全（缺 {view.customApi.missing.join("、")}）。先在下面保存三项再选。空着也不会让页面崩溃。
+                      {t("settings.customMissing", { missing: join(view.customApi.missing) })}
                     </span>
                   )}
                 </span>
@@ -306,10 +304,10 @@ export function SettingsDesk({
                   onChange={() => void choose("dsh")}
                 />
                 <span>
-                  <span className="font-medium">经 DSH（可选）</span>
-                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshRouteDetail(view.dshConfigured)}</span>
+                  <span className="font-medium">{t("settings.dshTitle")}</span>
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">{show(dshRouteDetail(view.dshConfigured))}</span>
                   {view.dshConnection?.configured ? (
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{dshSavedSummary(view.dshConnection)}</span>
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">{show(dshSavedSummary(view.dshConnection))}</span>
                   ) : null}
                 </span>
               </label>
@@ -318,15 +316,15 @@ export function SettingsDesk({
               {view.dshConfigured ? (
                 <>
                   <Button type="button" variant="outline" disabled={busy} onClick={() => void reconnectDsh()}>
-                    {reconnecting ? "正在重新连接…" : "重新连接 DSH"}
+                    {reconnecting ? t("settings.reconnecting") : t("settings.reconnect")}
                   </Button>
                   <Button type="button" variant="outline" disabled={busy} onClick={() => setWizardOpen(true)}>
-                    更改地址或令牌
+                    {t("settings.changeDsh")}
                   </Button>
                 </>
               ) : (
                 <Button type="button" variant="outline" disabled={busy} onClick={() => setWizardOpen(true)}>
-                  连接 DSH
+                  {t("settings.connectDsh")}
                 </Button>
               )}
             </div>
@@ -346,14 +344,13 @@ export function SettingsDesk({
               </div>
             ) : null}
             <div className="mt-4 space-y-2">
-              <Label htmlFor="dsh-model">经 DSH 时的模型</Label>
-              <p className="text-sm leading-6 text-muted-foreground">
-                下拉是向当前内核的 session/modelCatalog 实拉的，只列出这次能路由的模型。目录里已经有的 DeepSeek 不用再登记。不选则新开会话沿用模板会话当前的模型。目录没拉下来也不挡出字。选了之后仍经 DSH，不会把自定义 API 的密钥塞进会话。
-              </p>
-              {!view.dshConfigured ? <p className="text-sm leading-6 text-muted-foreground">未配齐 DSH，不能拉模型目录。</p> : null}
+              <Label htmlFor="dsh-model">{t("settings.dshModel")}</Label>
+              <p className="text-sm leading-6 text-muted-foreground">{t("settings.dshModelHelp")}</p>
+              {!view.dshConfigured ? <p className="text-sm leading-6 text-muted-foreground">{t("settings.dshNoCatalog")}</p> : null}
               {view.dshConfigured && !view.dshCatalog.loaded ? (
                 <p className="rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-3 py-2 text-sm leading-6">
-                  {view.dshCatalog.error} 目录没拉下来，不挡出字：经 DSH 时沿用模板会话当前模型。
+                  {show(view.dshCatalog.error)}
+                  {t("settings.catalogFailedTail")}
                 </p>
               ) : null}
               {view.dshConfigured && view.dshCatalog.loaded ? (
@@ -364,11 +361,11 @@ export function SettingsDesk({
                   disabled={busy}
                   onChange={(event) => void chooseDshModel(event.target.value)}
                 >
-                  <option value="">{defaultModelLabel(view.dshCatalog.defaultModel)}</option>
+                  <option value="">{show(defaultModelLabel(view.dshCatalog.defaultModel))}</option>
                   {view.dshModel &&
                   !view.dshCatalog.options.some((item) => item.provider === view.dshModel?.provider && item.model === view.dshModel?.model) ? (
                     <option value={modelValue(view.dshModel)}>
-                      {view.dshModel.provider} / {view.dshModel.model}（这次目录里没有）
+                      {t("settings.modelMissing", { model: `${view.dshModel.provider} / ${view.dshModel.model}` })}
                     </option>
                   ) : null}
                   {view.dshCatalog.options.map((option) => (
@@ -381,31 +378,27 @@ export function SettingsDesk({
               ) : null}
               {view.dshCatalog.failures.length > 0 ? (
                 <p className="text-sm leading-6 text-muted-foreground">
-                  有的提供方这次没列出来：
-                  {view.dshCatalog.failures.map((item) => `${item.name}${item.message ? `（${item.message}）` : ""}`).join("、")}
+                  {t("settings.failures")}
+                  {join(view.dshCatalog.failures.map((item) => `${item.name}${item.message ? ` (${show(item.message)})` : ""}`))}
                 </p>
               ) : null}
             </div>
-            <p className="mt-4 text-sm">当前实际出字：{routeMark(view.textRoute)}。</p>
+            <p className="mt-4 text-sm">{t("route.current", { route: show(routeMark(view.textRoute)) })}</p>
             {view.textRouteNote ? (
-              <p className="mt-3 rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-3 py-2 text-sm leading-6">{view.textRouteNote}</p>
+              <p className="mt-3 rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-3 py-2 text-sm leading-6">{show(view.textRouteNote)}</p>
             ) : null}
           </section>
         ) : null}
         {view && sections.showCustomApi ? (
           <section aria-labelledby="custom-api-title" className="sheet rounded-lg border border-border px-4 py-4">
             <h2 id="custom-api-title" className="text-base font-medium">
-              自定义 OpenAI 兼容接口（推荐）
+              {t("settings.customSection")}
             </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              这是本机推荐的出字方式：任意 OpenAI Chat Completions 兼容接口，例如 DeepSeek。官方根地址是 {DEEPSEEK_OPENAI_BASE_URL}，也可以写成 https://api.deepseek.com/v1。建议模型 deepseek-flash 或 deepseek-v4-pro，也可以改成 deepseek-chat、deepseek-reasoner。三项都空着时页面照常打开，并提示你来这里配置，不会崩溃。思考过程不会写入稿子。
-            </p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              密钥只存在这台围读的稿库里。页面上只显示末尾四位。密钥框留空表示不修改已保存的密钥。
-            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("settings.customHelp", { url: DEEPSEEK_OPENAI_BASE_URL })}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("settings.keyHelp")}</p>
             <div className="mt-4 space-y-3">
               <div className="space-y-2">
-                <Label htmlFor="custom-api-base">接口地址</Label>
+                <Label htmlFor="custom-api-base">{t("settings.baseUrl")}</Label>
                 <Input
                   id="custom-api-base"
                   value={baseUrl}
@@ -427,13 +420,13 @@ export function SettingsDesk({
                   onChange={(event) => {
                     setApiKey(event.target.value);
                   }}
-                  placeholder={view.customApi.apiKeyMask ? `已保存 ${view.customApi.apiKeyMask}，留空则不修改` : "粘贴 API Key"}
+                  placeholder={view.customApi.apiKeyMask ? t("settings.keyKept", { mask: view.customApi.apiKeyMask }) : t("settings.keyPlaceholder")}
                   autoComplete="off"
                   disabled={busy}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="custom-api-model">模型</Label>
+                <Label htmlFor="custom-api-model">{t("settings.model")}</Label>
                 <Input
                   id="custom-api-model"
                   value={model}
@@ -453,20 +446,20 @@ export function SettingsDesk({
                 </datalist>
               </div>
             </div>
-            {!sections.showRoutePicker ? <p className="mt-4 text-sm">当前实际出字：{routeMark(view.textRoute)}。</p> : null}
+            {!sections.showRoutePicker ? <p className="mt-4 text-sm">{t("route.current", { route: show(routeMark(view.textRoute)) })}</p> : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" variant="outline" disabled={busy} onClick={applyDeepSeekPreset}>
-                填入 DeepSeek
+                {t("settings.fillDeepSeek")}
               </Button>
               <Button type="button" variant="outline" disabled={busy} onClick={() => void saveCustom(false)}>
-                保存接口
+                {t("settings.saveApi")}
               </Button>
               <Button type="button" disabled={busy} onClick={() => void saveCustom(true)}>
-                保存并用于出字
+                {t("settings.saveAndUse")}
               </Button>
               {view.customApi.apiKeyMask ? (
                 <Button type="button" variant="outline" disabled={busy} onClick={() => void clearKey()}>
-                  清除已存密钥
+                  {t("settings.clearKey")}
                 </Button>
               ) : null}
             </div>

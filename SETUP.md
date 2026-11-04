@@ -55,6 +55,8 @@ npm run build
 npm run start
 ```
 
+页眉上的 **中文 / English** 会立刻换界面，并把选择写进 `data/store.json` 的 `locale`。没选过时，`WEIDU_LOCALE=zh` 或 `en` 盖过浏览器语言；都没有的话，浏览器偏好英语才用英语，否则中文。
+
 `npm run dev` 和 `npm run start` 监听 **127.0.0.1** 的 **4721** 端口。Next.js 自己默认是 `0.0.0.0`，这两个脚本传了 `--hostname`，所以正常启动不会。只有你确实想接受别的机器连过来时，才在环境变量、`.env.local` 或 `.env` 里设 `WEIDU_HOST=0.0.0.0`。shell 里的值优先于文件。`PORT` 改端口。`HOSTNAME` 不决定监听地址。
 
 程序跑着的时候可以查绑定：
@@ -175,6 +177,8 @@ npm run lint
 npm run build
 npm run start
 ```
+
+The **中文 / English** control in the header switches the interface immediately and writes the choice to `locale` in `data/store.json`. Before anyone chooses, `WEIDU_LOCALE=zh` or `en` overrides the browser. If that is unset too, a browser that prefers English gets English; everything else gets Chinese.
 
 `npm run dev` and `npm run start` listen on **127.0.0.1** port **4721**. Next.js itself defaults to `0.0.0.0`; these scripts pass `--hostname` so a normal launch does not. Set `WEIDU_HOST=0.0.0.0` in the environment, `.env.local`, or `.env` only when you mean to accept connections from other machines. A shell value wins over the files. `PORT` changes the port. `HOSTNAME` is not the listen address.
 

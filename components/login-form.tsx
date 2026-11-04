@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { LanguageSwitch } from "@/components/language-switch";
+import { useI18n } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +12,7 @@ import type { PublicConfig } from "@/lib/types";
 
 export function LoginForm() {
   const router = useRouter();
+  const { t, show } = useI18n();
   const [uid, setUid] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -35,13 +38,13 @@ export function LoginForm() {
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        setError(data.error || "进不去。");
+        setError(data.error ? show(data.error) : t("login.failed"));
         return;
       }
       router.replace("/");
       router.refresh();
     } catch {
-      setError("进不去。");
+      setError(t("login.failed"));
     } finally {
       setPending(false);
     }
@@ -50,19 +53,18 @@ export function LoginForm() {
   return (
     <main className="flex min-h-full items-center justify-center px-4 py-16">
       <form onSubmit={submit} className="sheet w-full max-w-md rounded-lg border border-border px-6 py-7">
-        <div className="flex items-center gap-2">
-          <span className="seal">围</span>
-          <h1 className="text-2xl font-medium">围读</h1>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="seal">围</span>
+            <h1 className="text-2xl font-medium">{t("login.brand")}</h1>
+          </div>
+          <LanguageSwitch />
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">围读·AI写作围读工作流</p>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          登录后只看自己的稿。可以从想法、大纲或一份完整稿件开始。每一步改到认可再确认，读者可请可不请。没有公开注册。
-        </p>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          本机用你自己的 OpenAI 兼容接口。密钥可以先空着：进入之后如果还没接上，页面会提示你去设置里配置 API，不会因此打不开。
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{t("login.tagline")}</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("login.body")}</p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("login.api")}</p>
         <div className="mt-6 space-y-2">
-          <Label htmlFor="uid">账号</Label>
+          <Label htmlFor="uid">{t("login.username")}</Label>
           <Input
             id="uid"
             autoComplete="username"
@@ -73,7 +75,7 @@ export function LoginForm() {
           />
         </div>
         <div className="mt-4 space-y-2">
-          <Label htmlFor="password">口令</Label>
+          <Label htmlFor="password">{t("login.password")}</Label>
           <Input
             id="password"
             type="password"
@@ -83,21 +85,21 @@ export function LoginForm() {
           />
         </div>
         {config?.devPasswordHint ? (
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">开发环境未设置 APP_PASSWORD 或 AUTH_PASSWORD，口令是 changeme。</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("login.devHint")}</p>
         ) : null}
         {config && !config.authConfigured ? (
-          <p className="mt-3 text-sm leading-6 text-destructive">生产环境必须设置 APP_PASSWORD 或 AUTH_PASSWORD。</p>
+          <p className="mt-3 text-sm leading-6 text-destructive">{t("login.prodHint")}</p>
         ) : null}
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
         <Button type="submit" size="lg" className="mt-5 w-full" disabled={pending || !uid.trim() || !password}>
-          {pending ? "正在进入…" : "进入稿房"}
+          {pending ? t("login.submitting") : t("login.submit")}
         </Button>
         <p className="mt-4 text-center text-sm">
           <Link href="/docs" className="text-primary underline-offset-4 hover:underline">
-            说明文档
+            {t("login.docs")}
           </Link>
         </p>
-        <p className="mt-5 text-xs leading-5 text-muted-foreground">只写作成年角色。未成年或年龄含糊的性内容会在生成时被拒绝。</p>
+        <p className="mt-5 text-xs leading-5 text-muted-foreground">{t("login.adults")}</p>
       </form>
     </main>
   );

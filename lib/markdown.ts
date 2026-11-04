@@ -1,5 +1,7 @@
 import { complianceHandoff, complianceNoteForRoute } from "./compliance";
 import { archivePath, countChars, formatWhen } from "./format";
+import type { Locale } from "./i18n/locale";
+import { localize, translate } from "./i18n/translate";
 import { STEPS, reviewsForStep, wordTargetLabel } from "./pipeline";
 import type { Project, TextRoute } from "./types";
 
@@ -11,22 +13,25 @@ export function projectToMarkdown(
   project: Project,
   scope: "full" | "current",
   routeInfo?: { textRoute: TextRoute; dshConfigured?: boolean; byokPurge?: boolean },
+  locale: Locale = "zh",
 ): string {
+  const L = (text: string) => localize(locale, text);
   const path = archivePath(project.ownerId, project.id);
   const handoff = routeInfo
     ? complianceNoteForRoute(routeInfo.textRoute, routeInfo.dshConfigured === true, routeInfo.byokPurge === true)
     : complianceHandoff();
-  const compliance = `合规：本文件不含合规修改标记。${handoff.note}`;
+  const compliance = `${L("合规：本文件不含合规修改标记。")}${L(handoff.note)}`;
+  const archiveLine = `${L("归档路径：")}${path}${L("（FileBrowser 尚未连接，这里只是路径约定）")}`;
   if (scope === "current") {
     const body = currentProse(project).trim();
     const which = project.polished.trim() ? "润色稿" : project.draft.trim() ? "初稿" : "空";
     return `# ${project.title}
 
-> 当前正文（${which}）· ${countChars(body)} 字 · 目标 ${wordTargetLabel(project)}
-> 归档路径：${path}（FileBrowser 尚未连接，这里只是路径约定）
+> ${L("当前正文")}（${L(which)}）· ${countChars(body)} ${L("字")} · ${L("目标")} ${L(wordTargetLabel(project))}
+> ${archiveLine}
 > ${compliance}
 
-${body || "还没有正文。"}
+${body || L("还没有正文。")}
 `;
   }
 
@@ -37,41 +42,43 @@ ${body || "还没有正文。"}
       const found = reviewsForStep(project, id as 1 | 2 | 3);
       if (!found.length) return "";
       const body = found.map((note) => `### ${note.readerName}\n\n${note.text.trim()}`).join("\n\n");
-      return `## 第 ${id} 步的读者意见\n\n${body}`;
+      const heading = locale === "en" ? translate("en", "md.stepNotes", { step: id }) : `第 ${id} 步的读者意见`;
+      return `## ${heading}\n\n${body}`;
     })
     .filter(Boolean)
     .join("\n\n");
 
+  const emptyMark = locale === "en" ? L("（空）") : "（空）";
   return `# ${project.title}
 
-- 状态：${status}
-- 当前步骤：${step}
-- 起点：${project.startFrom}
-- 目标字数：${wordTargetLabel(project)}
-- 归档路径：${path}（FileBrowser 尚未连接，这里只是路径约定）
-- 更新：${formatWhen(project.updatedAt)}
+- ${L("状态：")}${L(status)}
+- ${L("当前步骤：")}${L(step)}
+- ${L("起点：")}${project.startFrom}
+- ${L("目标字数：")}${L(wordTargetLabel(project))}
+- ${archiveLine}
+- ${L("更新：")}${L(formatWhen(project.updatedAt))}
 - ${compliance}
 
-## 想法
+## ${L("想法")}
 
-${project.idea.trim() || "（空）"}
+${project.idea.trim() || emptyMark}
 
-## 大纲
+## ${L("大纲")}
 
-${project.outline.trim() || "（空）"}
+${project.outline.trim() || emptyMark}
 
-## 初稿
+## ${L("初稿")}
 
-${project.draft.trim() || "（空）"}
+${project.draft.trim() || emptyMark}
 
-## 润色稿
+## ${L("润色稿")}
 
-${project.polished.trim() || "（空）"}
+${project.polished.trim() || emptyMark}
 
-${notes || "## 读者意见\n\n（这一版没有留下读者意见）"}
+${notes || (locale === "en" ? translate("en", "md.noNotesHeading") : "## 读者意见\n\n（这一版没有留下读者意见）")}
 
-## 结构质检
+## ${L("结构质检")}
 
-${project.qualityReport?.text.trim() || "（还没有质检）"}
+${project.qualityReport?.text.trim() || L("（还没有质检）")}
 `;
 }

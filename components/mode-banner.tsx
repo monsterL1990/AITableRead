@@ -1,22 +1,26 @@
+"use client";
+
 import Link from "next/link";
+import { useI18n } from "@/components/locale-provider";
 import { isPresetAccount } from "@/lib/account-policy";
 import { connectedModelLines, dshFallbackNote } from "@/lib/format";
 import type { PublicConfig } from "@/lib/types";
 
 export function ModeBanner({ config }: { config: PublicConfig | null }) {
+  const { t, show, join } = useI18n();
   if (!config) return null;
   if (isPresetAccount(config.accountType)) {
     const fallback = config.accountType === "preset-ds" ? "deepseek-official / deepseek-flash" : "xai-oauth / grok-4.7";
     const chosen = config.dshModel ? `${config.dshModel.provider} / ${config.dshModel.model}` : fallback;
-    const kind = config.accountType === "preset-ds" ? "预设 DeepSeek" : "预设 Grok";
+    const kind = config.accountType === "preset-ds" ? t("banner.presetKindDs") : t("banner.presetKindGrok");
     return (
       <div className="rounded-lg border border-border bg-paper px-4 py-3 text-sm leading-6 text-muted-foreground">
-        <p className="font-medium text-foreground">出字经 DSH</p>
+        <p className="font-medium text-foreground">{t("banner.presetTitle")}</p>
         <p>
-          {kind}账号固定走 DSH，模型是 {chosen}。不使用自定义 API，也没有出字设置。插件在那台 DSH 上，围读不要求 purge。
-          {config.accountType === "preset-ds" ? "这个模型必须在站点目录里。" : ""}
+          {t("banner.presetBody", { kind, model: chosen })}
+          {config.accountType === "preset-ds" ? t("banner.presetDsCatalog") : ""}
         </p>
-        {config.textRouteNote ? <p>{config.textRouteNote}</p> : null}
+        {config.textRouteNote ? <p>{show(config.textRouteNote)}</p> : null}
       </div>
     );
   }
@@ -24,15 +28,15 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
     const chosen = config.dshModel ? `${config.dshModel.provider} / ${config.dshModel.model}` : "";
     return (
       <div className="rounded-lg border border-border bg-paper px-4 py-3 text-sm leading-6 text-muted-foreground">
-        <p className="font-medium text-foreground">出字经 DSH</p>
+        <p className="font-medium text-foreground">{t("banner.dshTitle")}</p>
         <p>
-          大纲、初稿、润色、读者审、结构质检和按意见改稿都交给已配置的 DSH 会话。
-          {chosen ? `这一轮用目录里的 ${chosen}。` : "没另选模型时，新开会话沿用模板会话当前的模型。"}
-          插件要你在自己的 DSH 里安装，围读不要求 purge。这几步不走环境里的 OpenAI 兼容接口，也不走自定义 API 的密钥。要改走那条接口，去
+          {t("banner.dshBody")}
+          {chosen ? t("banner.dshChosen", { model: chosen }) : t("banner.dshDefault")}
+          {t("banner.dshRest")}
           <Link href="/settings" className="text-foreground underline underline-offset-4">
-            设置
+            {t("common.settings")}
           </Link>
-          里换。
+          {t("banner.dshRestTail")}
         </p>
       </div>
     );
@@ -41,11 +45,11 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
     if (!config.customApi?.configured) {
       return (
         <div className="rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-4 py-3 text-sm leading-6">
-          <p className="font-medium">自定义 API 还没填全</p>
+          <p className="font-medium">{t("banner.customMissingTitle")}</p>
           <p className="text-muted-foreground">
-            {config.textRouteNote || "请到设置里补上接口地址、API Key 和模型。这次不会改用环境里的 OpenAI 兼容接口，也不会换成演示稿。"}{" "}
+            {config.textRouteNote ? show(config.textRouteNote) : t("banner.customMissingFallback")}{" "}
             <Link href="/settings" className="text-foreground underline underline-offset-4">
-              打开设置
+              {t("banner.openSettings")}
             </Link>
           </p>
         </div>
@@ -54,44 +58,44 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
     const lines = connectedModelLines(config.model ?? config.customApi.model, config.baseUrl ?? config.customApi.baseUrl);
     return (
       <div className="rounded-lg border border-border bg-paper px-4 py-3 text-sm leading-6 text-muted-foreground">
-        <p className="font-medium text-foreground">出字经自定义 API。</p>
+        <p className="font-medium text-foreground">{t("banner.customTitle")}</p>
         <p>
-          直连设置里保存的接口，例如 DeepSeek。不经 DSH 会话，也不经 purge。
+          {t("banner.customBody")}
           {config.accountType === "custom" ? (
-            "这个账号只用自己的密钥，没有别的出字路由。"
+            t("banner.customOnly")
           ) : (
             <>
-              要改走经 DSH 或环境里的 OpenAI 兼容接口，去
+              {t("banner.customSwitch")}
               <Link href="/settings" className="text-foreground underline underline-offset-4">
-                设置
+                {t("common.settings")}
               </Link>
-              里换。
+              {t("banner.customSwitchTail")}
             </>
           )}
         </p>
         {lines.map((line, index) => (
           <p key={line.text} className={line.mono ? "break-all font-mono text-xs text-foreground/80" : undefined}>
-            {index < lines.length - 1 ? `${line.text} ` : line.text}
+            {index < lines.length - 1 ? `${line.mono ? line.text : show(line.text)} ` : line.mono ? line.text : show(line.text)}
           </p>
         ))}
       </div>
     );
   }
   if (config.demoMode || config.textRoute === "demo") {
-    const missing = config.missing.length ? config.missing.join("、") : "OPENAI_BASE_URL、OPENAI_API_KEY";
+    const shownMissing = join(config.missing.length ? config.missing : ["OPENAI_BASE_URL", "OPENAI_API_KEY"]);
     return (
       <div className="rounded-lg border border-[#e0c4a4] bg-[#fbf3e4] px-4 py-3 text-sm leading-6">
-        <p className="font-medium">请先配置 API</p>
+        <p className="font-medium">{t("banner.demoTitle")}</p>
         <p className="text-muted-foreground">
           {config.dshConfigured
-            ? `你选了环境里的 OpenAI 兼容接口，但还没有 ${missing}。`
-            : `${dshFallbackNote(config.dshMissing)}还没有 ${missing}。`}
-          页面可以继续用，生成的是可编辑的演示稿，不会因此崩溃。到
+            ? t("banner.demoChosen", { missing: shownMissing })
+            : `${show(dshFallbackNote(config.dshMissing))}${t("banner.demoAlsoMissing", { missing: shownMissing })}`}
+          {t("banner.demoRest")}
           <Link href="/settings" className="text-foreground underline underline-offset-4">
-            设置
+            {t("common.settings")}
           </Link>
-          里填写接口地址、API Key 和模型，或在 .env 里填写 OPENAI_BASE_URL 和 OPENAI_API_KEY。
-          {config.dshConfigured ? "DSH 已配置，也可以改回经 DSH。" : "经 DSH 不是默认路径。"}
+          {t("banner.demoRestTail")}
+          {config.dshConfigured ? t("banner.demoDshReady") : t("banner.demoDshNotDefault")}
         </p>
       </div>
     );
@@ -99,23 +103,23 @@ export function ModeBanner({ config }: { config: PublicConfig | null }) {
   const lines = connectedModelLines(config.model ?? "", config.baseUrl);
   return (
     <div className="rounded-lg border border-border bg-paper px-4 py-3 text-sm leading-6 text-muted-foreground">
-      <p className="font-medium text-foreground">出字经 OpenAI 兼容接口。</p>
+      <p className="font-medium text-foreground">{t("banner.cliproxyTitle")}</p>
       <p>
         {config.dshConfigured ? (
           <>
-            你在
+            {t("banner.cliproxyChosen")}
             <Link href="/settings" className="text-foreground underline underline-offset-4">
-              设置
+              {t("common.settings")}
             </Link>
-            里选了环境里的 OpenAI 兼容接口。DSH 已配置，这次不走那条会话，也不经 purge。
+            {t("banner.cliproxyChosenTail")}
           </>
         ) : (
-          dshFallbackNote(config.dshMissing)
+          show(dshFallbackNote(config.dshMissing))
         )}
       </p>
       {lines.map((line, index) => (
         <p key={line.text} className={line.mono ? "break-all font-mono text-xs text-foreground/80" : undefined}>
-          {index < lines.length - 1 ? `${line.text} ` : line.text}
+          {index < lines.length - 1 ? `${line.mono ? line.text : show(line.text)} ` : line.mono ? line.text : show(line.text)}
         </p>
       ))}
     </div>

@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
 import { DocsArticle } from "@/components/docs-article";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "开始使用" };
+export function generateMetadata() {
+  return pageMetadata("meta.docsStart");
+}
 
 export default function DocsGettingStartedPage() {
   return <DocsArticle slug="getting-started" />;

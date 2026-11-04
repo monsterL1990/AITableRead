@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useI18n } from "@/components/locale-provider";
 import { Shell } from "@/components/shell";
+import { translate } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,11 +23,11 @@ type PublicAccount = {
 
 export type NewAccountType = "preset-grok" | "preset-ds" | "custom";
 
-export function typeLabel(type: AccountType): string {
-  if (type === "owner") return "站长";
-  if (type === "preset-grok") return "预设 Grok";
-  if (type === "preset-ds") return "预设 DeepSeek";
-  return "非预设";
+export function typeLabel(type: AccountType, locale: Locale = "zh"): string {
+  if (type === "owner") return translate(locale, "admin.owner");
+  if (type === "preset-grok") return translate(locale, "admin.presetGrok");
+  if (type === "preset-ds") return translate(locale, "admin.presetDs");
+  return translate(locale, "admin.custom");
 }
 
 export function NewAccountTypeField({
@@ -34,26 +37,15 @@ export function NewAccountTypeField({
   type: NewAccountType;
   onChange?: (next: NewAccountType) => void;
 }) {
+  const { t } = useI18n();
   const choices: { id: NewAccountType; title: string; detail: string }[] = [
-    {
-      id: "preset-grok",
-      title: "预设 Grok",
-      detail: "没有设置。出字固定经 DSH，模型是站点的 Grok。围读不要求 purge。",
-    },
-    {
-      id: "preset-ds",
-      title: "预设 DeepSeek",
-      detail: "没有设置。出字固定经 DSH，模型是站点目录里的 DeepSeek。围读不要求 purge。",
-    },
-    {
-      id: "custom",
-      title: "非预设",
-      detail: "设置里留自定义 API。默认直连。围读不要求 purge。",
-    },
+    { id: "preset-grok", title: t("admin.presetGrok"), detail: t("admin.grokDetail") },
+    { id: "preset-ds", title: t("admin.presetDs"), detail: t("admin.dsDetail") },
+    { id: "custom", title: t("admin.custom"), detail: t("admin.customDetail") },
   ];
   return (
     <fieldset className="space-y-2">
-      <legend className="text-sm font-medium">类型</legend>
+      <legend className="text-sm font-medium">{t("admin.type")}</legend>
       {choices.map((choice) => (
         <label key={choice.id} className="flex cursor-pointer gap-3 rounded-lg border border-border px-3 py-3">
           <input
@@ -72,8 +64,22 @@ export function NewAccountTypeField({
   );
 }
 
+export function AdminClosed() {
+  const { t } = useI18n();
+  return (
+    <Shell>
+      <div className="mx-auto max-w-2xl space-y-3">
+        <h1 className="text-2xl font-medium">{t("admin.title")}</h1>
+        <p className="text-sm leading-6 text-muted-foreground">{t("admin.closed1")}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{t("admin.closed2")}</p>
+      </div>
+    </Shell>
+  );
+}
+
 export function AdminDesk() {
   const router = useRouter();
+  const { t, show, locale } = useI18n();
   const [accounts, setAccounts] = useState<PublicAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -95,7 +101,7 @@ export function AdminDesk() {
       router.replace("/");
       return;
     }
-    if (!response.ok) throw new Error("账号名单没有载入。");
+    if (!response.ok) throw new Error("admin.loadFailed");
     const body = (await response.json()) as { accounts: PublicAccount[] };
     setAccounts(body.accounts);
   }
@@ -106,7 +112,7 @@ export function AdminDesk() {
       try {
         await load();
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "账号名单没有载入。");
+        if (!cancelled) setError(loadError instanceof Error ? show(loadError.message) : t("admin.loadFailed"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -128,16 +134,16 @@ export function AdminDesk() {
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        toast.error(data.error || "账号没能建起来。");
+        toast.error(data.error ? show(data.error) : t("admin.createFailed"));
         return;
       }
       setUid("");
       setPassword("");
       setDisplay("");
-      toast.success("账号已建好。");
+      toast.success(t("admin.created"));
       await load();
     } catch {
-      toast.error("账号没能建起来。");
+      toast.error(t("admin.createFailed"));
     } finally {
       setCreating(false);
     }
@@ -153,32 +159,32 @@ export function AdminDesk() {
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        toast.error(data.error || "没能改这个账号。");
+        toast.error(data.error ? show(data.error) : t("admin.updateFailed"));
         return;
       }
       toast.success(success);
       await load();
     } catch {
-      toast.error("没能改这个账号。");
+      toast.error(t("admin.updateFailed"));
     } finally {
       setBusyUid("");
     }
   }
 
   async function removeAccount(name: string) {
-    if (!window.confirm(`删除账号 ${name}？这个人的稿子、读者和设置会一起删掉。`)) return;
+    if (!window.confirm(t("admin.deleteAsk", { name }))) return;
     setBusyUid(name);
     try {
       const response = await fetch(`/api/admin/accounts/${encodeURIComponent(name)}`, { method: "DELETE" });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        toast.error(data.error || "没能删除。");
+        toast.error(data.error ? show(data.error) : t("admin.deleteFailed"));
         return;
       }
-      toast.success("账号已删除。");
+      toast.success(t("admin.deleted"));
       await load();
     } catch {
-      toast.error("没能删除。");
+      toast.error(t("admin.deleteFailed"));
     } finally {
       setBusyUid("");
     }
@@ -188,21 +194,19 @@ export function AdminDesk() {
     <Shell>
       <div className="mx-auto max-w-2xl space-y-5">
         <div>
-          <h1 className="text-2xl font-medium">账号</h1>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            站长在这里开好友账号。预设 Grok 和预设 DeepSeek 都固定经 DSH，看不到设置。围读不要求 purge。非预设只用自己的 API Key，默认直连。新建的稿库都带 R18读者、怪物Z、中年男。没有邀请码。
-          </p>
+          <h1 className="text-2xl font-medium">{t("admin.title")}</h1>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("admin.intro")}</p>
         </div>
         <section className="sheet rounded-lg border border-border px-4 py-4">
-          <h2 className="text-base font-medium">新建账号</h2>
+          <h2 className="text-base font-medium">{t("admin.newTitle")}</h2>
           <div className="mt-4 space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="new-uid">账号</Label>
+              <Label htmlFor="new-uid">{t("admin.username")}</Label>
               <Input id="new-uid" value={uid} onChange={(event) => setUid(event.target.value)} autoComplete="off" spellCheck={false} />
-              <p className="text-sm leading-6 text-muted-foreground">小写字母开头，可用数字、下划线和短横线。</p>
+              <p className="text-sm leading-6 text-muted-foreground">{t("admin.usernameHint")}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-password">口令</Label>
+              <Label htmlFor="new-password">{t("admin.password")}</Label>
               <Input
                 id="new-password"
                 type="password"
@@ -212,16 +216,16 @@ export function AdminDesk() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-display">显示名</Label>
+              <Label htmlFor="new-display">{t("admin.display")}</Label>
               <Input id="new-display" value={display} onChange={(event) => setDisplay(event.target.value)} autoComplete="off" />
             </div>
             <NewAccountTypeField type={type} onChange={setType} />
             <Button type="button" disabled={creating || !uid.trim() || !password} onClick={() => void createAccount()}>
-              {creating ? "正在建立…" : "建立账号"}
+              {creating ? t("admin.creating") : t("admin.create")}
             </Button>
           </div>
         </section>
-        {loading ? <p className="text-sm text-muted-foreground">正在读取账号…</p> : null}
+        {loading ? <p className="text-sm text-muted-foreground">{t("admin.loading")}</p> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="space-y-3">
           {accounts.map((account) => {
@@ -230,15 +234,15 @@ export function AdminDesk() {
               <section key={account.uid} className="sheet rounded-lg border border-border px-4 py-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-medium">{account.uid}</h2>
-                  <Badge variant="secondary">{typeLabel(account.type)}</Badge>
-                  {account.disabled ? <Badge variant="destructive">已停用</Badge> : null}
+                  <Badge variant="secondary">{typeLabel(account.type, locale)}</Badge>
+                  {account.disabled ? <Badge variant="destructive">{t("admin.disabled")}</Badge> : null}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {account.display}
+                  {account.display === "站长" ? t("admin.owner") : account.display}
                   {account.createdAt ? ` · ${account.createdAt.slice(0, 10)}` : ""}
                 </p>
                 {account.type === "owner" ? (
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">站长口令是环境变量 APP_PASSWORD，不在这里改。</p>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("admin.ownerPassword")}</p>
                 ) : (
                   <div className="mt-3 space-y-3">
                     <div className="flex flex-wrap gap-2">
@@ -246,17 +250,17 @@ export function AdminDesk() {
                         type="button"
                         variant="outline"
                         disabled={busy}
-                        onClick={() => void patchAccount(account.uid, { disabled: !account.disabled }, account.disabled ? "已启用。" : "已停用。")}
+                        onClick={() => void patchAccount(account.uid, { disabled: !account.disabled }, account.disabled ? t("admin.enabled") : t("admin.disabledDone"))}
                       >
-                        {account.disabled ? "启用" : "停用"}
+                        {account.disabled ? t("admin.enable") : t("admin.disable")}
                       </Button>
                       <Button type="button" variant="outline" disabled={busy} onClick={() => void removeAccount(account.uid)}>
-                        删除
+                        {t("common.delete")}
                       </Button>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="space-y-2">
-                        <Label htmlFor={`reset-${account.uid}`}>重设口令</Label>
+                        <Label htmlFor={`reset-${account.uid}`}>{t("admin.reset")}</Label>
                         <Input
                           id={`reset-${account.uid}`}
                           type="password"
@@ -271,12 +275,12 @@ export function AdminDesk() {
                         disabled={busy || !(nextPassword[account.uid] ?? "").trim()}
                         onClick={() => {
                           const next = nextPassword[account.uid] ?? "";
-                          void patchAccount(account.uid, { password: next }, "口令已重设。").then(() => {
+                          void patchAccount(account.uid, { password: next }, t("admin.passwordReset")).then(() => {
                             setNextPassword((current) => ({ ...current, [account.uid]: "" }));
                           });
                         }}
                       >
-                        保存新口令
+                        {t("admin.savePassword")}
                       </Button>
                     </div>
                   </div>

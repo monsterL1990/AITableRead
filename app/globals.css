@@ -54,6 +54,13 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* English labels are longer than the Chinese they replace. Let text buttons grow instead of clipping. */
+[data-slot="button"]:not([data-size^="icon"]) {
+  height: auto;
+  white-space: normal;
+  text-align: center;
+}
+
 :root {
   --background: #e6dcc8;
   --foreground: #1c1712;

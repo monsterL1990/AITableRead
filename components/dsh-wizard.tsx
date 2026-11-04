@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { useI18n } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ export function DshWizard({
   onSaved: (view: SettingsResponse) => void;
   onUseCustom: () => void;
 }) {
+  const { t, show } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [browserUrl, setBrowserUrl] = useState(initial?.baseUrl ?? "");
   const [portsText, setPortsText] = useState(DEFAULT_DSH_PROBE_PORTS.join(", "));
@@ -71,13 +73,13 @@ export function DshWizard({
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string; results?: ProbeRow[] };
       if (!response.ok || !Array.isArray(data.results)) {
-        setError(data.error || "探测没有完成。");
+        setError(data.error || "wizard.probeFailed");
         setProbeRows([]);
         return;
       }
       setProbeRows(data.results);
     } catch {
-      setError(controller.signal.aborted ? "探测超时，没有一直等下去。" : "探测没有完成。");
+      setError(controller.signal.aborted ? "wizard.probeTimeout" : "wizard.probeFailed");
       setProbeRows([]);
     } finally {
       clearTimeout(timer);
@@ -94,7 +96,7 @@ export function DshWizard({
       return;
     }
     if (!read.token.trim()) {
-      setError("要填写 DSH 令牌。");
+      setError("wizard.needToken");
       return;
     }
     if (read.baseUrl) setBrowserUrl(read.baseUrl);
@@ -124,7 +126,7 @@ export function DshWizard({
         dedicatedSession?: DshSessionChoice;
       };
       if (!response.ok || !data.dedicatedSession?.sessionId) {
-        setError(data.error || "没能新建围读专用会话。");
+        setError(data.error || "wizard.sessionFailed");
         return;
       }
       setSessions(data.sessions ?? []);
@@ -134,7 +136,7 @@ export function DshWizard({
       setTestedKey(`${nextParsed.baseUrl}\n${read.token}\n${basicUser}\n${basicPassword}`);
       setStep(4);
     } catch {
-      setError(controller.signal.aborted ? "连接测试超时，没有一直等下去。" : "连接测试没有通过。");
+      setError(controller.signal.aborted ? "wizard.testTimeout" : "wizard.testFailed");
     } finally {
       clearTimeout(timer);
       setTesting(false);
@@ -170,14 +172,14 @@ export function DshWizard({
       });
       const data = (await response.json().catch(() => ({}))) as SettingsResponse & { error?: string };
       if (!response.ok || !data.textRoute || !data.dshConnection) {
-        setError(data.error || "没能保存 DSH 连接。");
+        setError(data.error || "wizard.saveFailed");
         return;
       }
       setSaved(true);
       onSaved(data);
-      toast.success("已保存 DSH 连接。");
+      toast.success(t("wizard.saved"));
     } catch {
-      setError("没能保存 DSH 连接。");
+      setError("wizard.saveFailed");
     } finally {
       setSaving(false);
     }
@@ -187,13 +189,13 @@ export function DshWizard({
     return (
       <section className="sheet rounded-lg border border-border px-4 py-4" aria-labelledby="dsh-wizard-done">
         <h2 id="dsh-wizard-done" className="text-base font-medium">
-          已连上你的 DSH
+          {t("wizard.doneTitle")}
         </h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">{DSH_DEDICATED_SESSION_NOTE}</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">{DSH_PLUGIN_NOTE}</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{show(DSH_DEDICATED_SESSION_NOTE)}</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{show(DSH_PLUGIN_NOTE)}</p>
         <div className="mt-4">
           <Button type="button" onClick={onCancel}>
-            完成
+            {t("wizard.done")}
           </Button>
         </div>
       </section>
@@ -201,16 +203,16 @@ export function DshWizard({
   }
 
   return (
-    <div className="space-y-3" aria-label="连接 DSH">
+    <div className="space-y-3" aria-label={t("wizard.group")}>
       <StepCard
         n={1}
-        title="你有自己的 DSH 吗？"
+        title={t("wizard.askTitle")}
         active={step === 1}
         done={step > 1}
         onEdit={() => setStep(1)}
       >
         <p className="text-sm leading-6 text-muted-foreground">
-          围读默认走自定义 OpenAI 兼容接口。DSH 是可选项，要你自己在本机或自建主机上跑着。没有的话，不用装。
+          {t("wizard.askBody")}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
@@ -221,7 +223,7 @@ export function DshWizard({
               onUseCustom();
             }}
           >
-            没有，去用自定义接口
+            {t("wizard.noDsh")}
           </Button>
           <Button
             type="button"
@@ -230,17 +232,17 @@ export function DshWizard({
               setStep(2);
             }}
           >
-            有，继续
+            {t("wizard.yesDsh")}
           </Button>
         </div>
       </StepCard>
 
-      <StepCard n={2} title="粘贴浏览器里的 DSH 地址" active={step === 2} done={step > 2} onEdit={() => setStep(2)}>
+      <StepCard n={2} title={t("wizard.urlTitle")} active={step === 2} done={step > 2} onEdit={() => setStep(2)}>
         <p className="text-sm leading-6 text-muted-foreground">
-          粘贴你打开 DSH 时地址栏里的那一段。围读只留下协议、主机和端口。
+          {t("wizard.urlBody")}
         </p>
         <div className="mt-3 space-y-2">
-          <Label htmlFor="dsh-browser-url">浏览器地址</Label>
+          <Label htmlFor="dsh-browser-url">{t("wizard.urlLabel")}</Label>
           <Input
             id="dsh-browser-url"
             value={browserUrl}
@@ -256,13 +258,13 @@ export function DshWizard({
           {browserUrl.trim() && parsed.ok ? (
             <p className="text-sm leading-6 text-muted-foreground">
               Base URL：<span className="font-mono text-xs text-foreground">{parsed.baseUrl}</span>
-              {parsed.basicUser ? "。地址里的用户名会带到下一步的 Basic Auth，不会写进 Base URL。" : ""}
+              {parsed.basicUser ? t("wizard.urlBasic") : ""}
             </p>
           ) : null}
           {browserUrl.trim() && !parsed.ok ? <p className="text-sm leading-6 text-destructive">{parsed.error}</p> : null}
         </div>
         <div className="mt-4 space-y-2">
-          <Label htmlFor="dsh-probe-ports">本机端口</Label>
+          <Label htmlFor="dsh-probe-ports">{t("wizard.ports")}</Label>
           <Input
             id="dsh-probe-ports"
             value={portsText}
@@ -272,13 +274,13 @@ export function DshWizard({
             spellCheck={false}
             disabled={busy}
           />
-          <p className="text-sm leading-6 text-muted-foreground">可选。只探测这台机器的 127.0.0.1，失败会停下来，不会一直转。</p>
+          <p className="text-sm leading-6 text-muted-foreground">{t("wizard.portsHelp")}</p>
           <Button type="button" variant="outline" disabled={busy} onClick={() => void probe()}>
-            {probing ? "正在探测…" : "探测常见本机端口"}
+            {probing ? t("wizard.probing") : t("wizard.probe")}
           </Button>
           {probeRows ? (
             <ul className="space-y-1 text-sm leading-6">
-              {probeRows.length === 0 ? <li className="text-muted-foreground">没有端口可探。</li> : null}
+              {probeRows.length === 0 ? <li className="text-muted-foreground">{t("wizard.noPorts")}</li> : null}
               {probeRows.map((row) => (
                 <li key={row.port}>
                   {row.ok ? (
@@ -290,11 +292,11 @@ export function DshWizard({
                         setTestedKey("");
                       }}
                     >
-                      {row.url} 有应答{typeof row.status === "number" ? `（${row.status}）` : ""}，用这个地址
+                      {t("wizard.probeHit", { url: row.url, status: typeof row.status === "number" ? t("wizard.probeStatus", { status: row.status }) : "" })}
                     </button>
                   ) : (
                     <span className="text-muted-foreground">
-                      {row.port} {row.error || "没有应答"}
+                      {t("wizard.probeMiss", { port: row.port, error: row.error ? show(row.error) : t("wizard.noAnswer") })}
                     </span>
                   )}
                 </li>
@@ -304,7 +306,7 @@ export function DshWizard({
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => setStep(1)}>
-            上一步
+            {t("common.back")}
           </Button>
           <Button
             type="button"
@@ -317,14 +319,14 @@ export function DshWizard({
               setStep(3);
             }}
           >
-            下一步
+            {t("common.next")}
           </Button>
         </div>
       </StepCard>
 
-      <StepCard n={3} title="令牌和可选的 Basic Auth" active={step === 3} done={step > 3 && tested} onEdit={() => setStep(3)}>
+      <StepCard n={3} title={t("wizard.tokenTitle")} active={step === 3} done={step > 3 && tested} onEdit={() => setStep(3)}>
         <p className="text-sm leading-6 text-muted-foreground">
-          如果前面还有 Basic Auth，用户名和密码分开填，没有就留空。测试连接会核对这台 DSH，并新建一个围读专用会话。
+          {t("wizard.tokenBody")}
         </p>
         <div className="mt-3 space-y-3">
           <div className="space-y-2">
@@ -343,14 +345,14 @@ export function DshWizard({
                 }
                 setTestedKey("");
               }}
-              placeholder={initial?.tokenMask ? `已保存 ${initial.tokenMask}，重连请再贴一次` : "粘贴启动令牌，或整段 dsh web 地址"}
+              placeholder={initial?.tokenMask ? t("wizard.tokenKept", { mask: initial.tokenMask }) : t("wizard.tokenPlaceholder")}
               autoComplete="off"
               disabled={busy}
             />
-            <p className="text-sm leading-6 text-muted-foreground">{DSH_TOKEN_HELP}</p>
+            <p className="text-sm leading-6 text-muted-foreground">{show(DSH_TOKEN_HELP)}</p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="dsh-basic-user">Basic Auth 用户名（可选）</Label>
+            <Label htmlFor="dsh-basic-user">{t("wizard.basicUser")}</Label>
             <Input
               id="dsh-basic-user"
               value={basicUser}
@@ -364,7 +366,7 @@ export function DshWizard({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="dsh-basic-password">Basic Auth 密码（可选）</Label>
+            <Label htmlFor="dsh-basic-password">{t("wizard.basicPassword")}</Label>
             <Input
               id="dsh-basic-password"
               type="password"
@@ -373,7 +375,7 @@ export function DshWizard({
                 setBasicPassword(event.target.value);
                 setTestedKey("");
               }}
-              placeholder={initial?.hasBasicPassword ? "已保存过密码。测试连接请再填一次" : ""}
+              placeholder={initial?.hasBasicPassword ? t("wizard.basicKept") : ""}
               autoComplete="off"
               disabled={busy}
             />
@@ -381,22 +383,22 @@ export function DshWizard({
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => setStep(2)}>
-            上一步
+            {t("common.back")}
           </Button>
           <Button type="button" disabled={busy || !parsed.ok} onClick={() => void testConnection()}>
-            {testing ? "正在测试…" : "测试连接"}
+            {testing ? t("wizard.testing") : t("wizard.test")}
           </Button>
         </div>
       </StepCard>
 
-      <StepCard n={4} title="模型和专用会话" active={step === 4} done={false} onEdit={() => tested && setStep(4)}>
+      <StepCard n={4} title={t("wizard.modelTitle")} active={step === 4} done={false} onEdit={() => tested && setStep(4)}>
         {tested && dedicatedSessionId ? (
           <>
-            <p className="text-sm leading-6 text-muted-foreground">{DSH_DEDICATED_SESSION_NOTE}</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{DSH_PLUGIN_NOTE}</p>
+            <p className="text-sm leading-6 text-muted-foreground">{show(DSH_DEDICATED_SESSION_NOTE)}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{show(DSH_PLUGIN_NOTE)}</p>
             <div className="mt-3 space-y-3">
               <div className="space-y-2">
-                <Label htmlFor="dsh-wizard-model">模型（可选）</Label>
+                <Label htmlFor="dsh-wizard-model">{t("wizard.modelLabel")}</Label>
                 {catalog?.loaded && catalog.options.length > 0 ? (
                   <select
                     id="dsh-wizard-model"
@@ -405,7 +407,7 @@ export function DshWizard({
                     disabled={busy}
                     onChange={(event) => setModelKey(event.target.value)}
                   >
-                    <option value="">沿用内核默认</option>
+                    <option value="">{t("wizard.useDefault")}</option>
                     {catalog.options.map((option) => (
                       <option key={modelValue(option)} value={modelValue(option)}>
                         {option.name === option.model ? "" : `${option.name} · `}
@@ -415,35 +417,36 @@ export function DshWizard({
                   </select>
                 ) : (
                   <p id="dsh-wizard-model" className="text-sm leading-6 text-muted-foreground">
-                    {catalog?.loaded ? "目录里这次没有可选模型，保存后沿用内核默认。" : catalog?.error || "模型目录没拉下来。"} 这不挡保存。
+                    {catalog?.loaded ? t("wizard.noModels") : show(catalog?.error || "wizard.catalogDown")}
+                    {t("wizard.catalogOk")}
                   </p>
                 )}
               </div>
               <details className="rounded-lg border border-border px-3 py-2">
-                <summary className="cursor-pointer text-sm font-medium">{dshAdvancedSummary(Boolean(advancedSessionId.trim()))}</summary>
+                <summary className="cursor-pointer text-sm font-medium">{show(dshAdvancedSummary(Boolean(advancedSessionId.trim())))}</summary>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  默认不用你已有的对话。只有想让以后的新会话继承某个会话上的 agentPreset 时，再指定它。
+                  {t("wizard.advancedHelp")}
                 </p>
                 <div className="mt-2 space-y-2">
-                  <Label htmlFor="dsh-advanced-session">模板会话 id</Label>
+                  <Label htmlFor="dsh-advanced-session">{t("wizard.templateId")}</Label>
                   <Input
                     id="dsh-advanced-session"
                     value={advancedSessionId}
                     onChange={(event) => setAdvancedSessionId(event.target.value)}
-                    placeholder="留空则用刚建的围读会话"
+                    placeholder={t("wizard.templatePlaceholder")}
                     autoComplete="off"
                     spellCheck={false}
                     disabled={busy}
                   />
                   {sessions.length > 0 ? (
                     <select
-                      aria-label="从已有会话填入"
+                      aria-label={t("wizard.fillSession")}
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
                       value={sessions.some((item) => item.sessionId === advancedSessionId) ? advancedSessionId : ""}
                       disabled={busy}
                       onChange={(event) => setAdvancedSessionId(event.target.value)}
                     >
-                      <option value="">不指定</option>
+                      <option value="">{t("wizard.noTemplate")}</option>
                       {sessions.map((item) => (
                         <option key={item.sessionId} value={item.sessionId}>
                           {item.title === item.sessionId ? item.sessionId : item.title}
@@ -456,22 +459,22 @@ export function DshWizard({
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" variant="outline" disabled={busy} onClick={() => setStep(3)}>
-                上一步
+                {t("common.back")}
               </Button>
               <Button type="button" disabled={busy || !(advancedSessionId.trim() || dedicatedSessionId)} onClick={() => void save()}>
-                {saving ? "正在保存…" : "保存并用于出字"}
+                {saving ? t("wizard.saving") : t("wizard.saveUse")}
               </Button>
             </div>
           </>
         ) : (
-          <p className="text-sm leading-6 text-muted-foreground">先在上一步通过连接测试。围读会自己建会话。</p>
+          <p className="text-sm leading-6 text-muted-foreground">{t("wizard.needTest")}</p>
         )}
       </StepCard>
 
-      {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm leading-6 text-destructive">{show(error)}</p> : null}
       <div>
         <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
-          取消
+          {t("wizard.cancel")}
         </Button>
       </div>
     </div>
@@ -493,6 +496,7 @@ function StepCard({
   onEdit: () => void;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <section
       className={`sheet rounded-lg border px-4 py-4 ${active ? "border-primary" : "border-border"} ${active ? "" : "opacity-80"}`}
@@ -504,12 +508,12 @@ function StepCard({
         </h3>
         {done && !active ? (
           <Button type="button" variant="outline" onClick={onEdit}>
-            修改
+            {t("wizard.edit")}
           </Button>
         ) : null}
       </div>
       {active ? <div className="mt-2">{children}</div> : null}
-      {!active && done ? <p className="mt-1 text-sm text-muted-foreground">已完成</p> : null}
+      {!active && done ? <p className="mt-1 text-sm text-muted-foreground">{t("wizard.stepDone")}</p> : null}
     </section>
   );
 }

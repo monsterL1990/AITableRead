@@ -1,9 +1,11 @@
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { authEnabled } from "@/lib/auth-mode";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "进入围读" };
+export function generateMetadata() {
+  return pageMetadata("meta.login");
+}
 
 export default function LoginPage() {
   if (!authEnabled()) redirect("/");

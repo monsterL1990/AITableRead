@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
 import { PromptStudio } from "@/components/prompt-studio";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "提示词" };
+export function generateMetadata() {
+  return pageMetadata("meta.prompts");
+}
 
 export default function PromptsPage() {
   return <PromptStudio />;

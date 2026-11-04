@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
 import { DocsArticle } from "@/components/docs-article";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "AI读者与提示词" };
+export function generateMetadata() {
+  return pageMetadata("meta.docsReaders");
+}
 
 export default function DocsReadersPage() {
   return <DocsArticle slug="readers" />;

@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
 import { DocsArticle } from "@/components/docs-article";
+import { pageMetadata } from "@/lib/i18n/request";
 
-export const metadata: Metadata = { title: "概述" };
+export function generateMetadata() {
+  return pageMetadata("meta.docsOverview");
+}
 
 export default function DocsOverviewPage() {
   return <DocsArticle slug="overview" />;

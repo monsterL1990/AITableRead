@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useI18n } from "@/components/locale-provider";
 import { Shell } from "@/components/shell";
+import type { MessageId } from "@/lib/i18n/catalog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +16,7 @@ async function readPrompts(router: { replace: (href: string) => void }) {
     router.replace("/login");
     return null;
   }
-  if (!response.ok) throw new Error("提示词没有载入。");
+  if (!response.ok) throw new Error("prompt.loadFailed");
   return (await response.json()) as { enforced: string; items: PromptItem[] };
 }
 
@@ -29,6 +31,7 @@ type PromptItem = {
 
 export function PromptStudio() {
   const router = useRouter();
+  const { t, show } = useI18n();
   const [enforced, setEnforced] = useState("");
   const [items, setItems] = useState<PromptItem[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -46,7 +49,7 @@ export function PromptStudio() {
       setItems(body.items);
       setDrafts(Object.fromEntries(body.items.map((item) => [item.key, item.text])));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "提示词没有载入。");
+      setError(loadError instanceof Error ? show(loadError.message) : t("prompt.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -62,7 +65,7 @@ export function PromptStudio() {
         setItems(body.items);
         setDrafts(Object.fromEntries(body.items.map((item) => [item.key, item.text])));
       } catch (loadError) {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "提示词没有载入。");
+        if (!cancelled) setError(loadError instanceof Error ? show(loadError.message) : t("prompt.loadFailed"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -70,6 +73,8 @@ export function PromptStudio() {
     return () => {
       cancelled = true;
     };
+    // Language helpers are closed over for this load only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   async function save(key: string, text: string) {
@@ -86,7 +91,7 @@ export function PromptStudio() {
       }
       const data = (await response.json().catch(() => ({}))) as { error?: string; items?: PromptItem[] };
       if (!response.ok || !data.items) {
-        toast.error(data.error || "没能保存提示词。");
+        toast.error(data.error ? show(data.error) : t("prompt.saveFailed"));
         return;
       }
       setItems(data.items);
@@ -95,9 +100,9 @@ export function PromptStudio() {
         for (const item of data.items ?? []) next[item.key] = item.text;
         return next;
       });
-      toast.success(text.trim() ? "已保存这条提示词。" : "已恢复默认。");
+      toast.success(text.trim() ? t("prompt.saved") : t("prompt.restored"));
     } catch {
-      toast.error("没能保存提示词。");
+      toast.error(t("prompt.saveFailed"));
     } finally {
       setSavingKey("");
     }
@@ -107,21 +112,21 @@ export function PromptStudio() {
     <Shell>
       <div className="space-y-5">
         <div>
-          <h1 className="text-2xl font-medium">提示词</h1>
+          <h1 className="text-2xl font-medium">{t("prompt.title")}</h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            六条系统提示词可以改。演示模式不会调用它们；接上模型后，生成用的是这里保存的文字。
+            {t("prompt.intro")}
           </p>
         </div>
         <section className="sheet rounded-lg border border-border px-4 py-4">
-          <h2 className="text-sm font-medium">每条提示词末尾都会附上这段，改不掉</h2>
-          <pre className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{enforced || "正在读取…"}</pre>
+          <h2 className="text-sm font-medium">{t("prompt.hardRule")}</h2>
+          <pre className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{enforced || t("prompt.loadingRule")}</pre>
         </section>
-        {loading ? <p className="text-sm text-muted-foreground">正在读取提示词…</p> : null}
+        {loading ? <p className="text-sm text-muted-foreground">{t("prompt.loading")}</p> : null}
         {error ? (
           <div className="sheet rounded-lg border border-border px-4 py-5">
             <p className="text-sm">{error}</p>
             <Button type="button" variant="outline" className="mt-3" onClick={() => void load()}>
-              再试一次
+              {t("common.retry")}
             </Button>
           </div>
         ) : null}
@@ -132,19 +137,19 @@ export function PromptStudio() {
             return (
               <section key={item.key} className="sheet rounded-lg border border-border px-4 py-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-medium">{item.label}</h2>
-                  {item.customized ? <Badge variant="outline">已改过</Badge> : <Badge variant="secondary">默认</Badge>}
+                  <h2 className="text-base font-medium">{t(`prompt.${item.key}.label` as MessageId)}</h2>
+                  {item.customized ? <Badge variant="outline">{t("prompt.customized")}</Badge> : <Badge variant="secondary">{t("prompt.default")}</Badge>}
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{t(`prompt.${item.key}.description` as MessageId)}</p>
                 <Textarea
-                  aria-label={item.label}
+                  aria-label={t(`prompt.${item.key}.label` as MessageId)}
                   value={draft}
                   onChange={(event) => setDrafts((current) => ({ ...current, [item.key]: event.target.value }))}
                   className="mt-3 min-h-64 font-sans text-sm leading-6"
                 />
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" disabled={!dirty || savingKey === item.key} onClick={() => void save(item.key, draft)}>
-                    {savingKey === item.key ? "正在保存…" : "保存这条"}
+                    {savingKey === item.key ? t("prompt.saving") : t("prompt.save")}
                   </Button>
                   <Button
                     type="button"
@@ -152,7 +157,7 @@ export function PromptStudio() {
                     disabled={!item.customized || savingKey === item.key}
                     onClick={() => void save(item.key, "")}
                   >
-                    恢复默认
+                    {t("prompt.restore")}
                   </Button>
                 </div>
               </section>
