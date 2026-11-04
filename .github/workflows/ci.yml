@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Tests already point GAOJIAN_DATA_FILE at a temp directory. This is the
+  # fallback so a missed path cannot write data/ inside the checkout.
+  GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
+
+jobs:
+  check:
+    name: lint, types, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+
+  windows:
+    name: npm test on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm test
