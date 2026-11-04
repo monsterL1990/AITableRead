@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DSH_PLUGIN_NOTE, DSH_TOKEN_HELP, DEFAULT_DSH_PROBE_PORTS, parseDshBrowserUrl, readDshTokenInput } from "@/lib/dsh-setup";
+import { DSH_DEDICATED_SESSION_NOTE, DSH_PLUGIN_NOTE, DSH_TOKEN_HELP, DEFAULT_DSH_PROBE_PORTS, dshAdvancedSummary, parseDshBrowserUrl, readDshTokenInput } from "@/lib/dsh-setup";
 import type { DshCatalogView, DshSessionChoice, PublicDshConnection, SettingsResponse } from "@/lib/types";
 
 type ProbeRow = { port: number; url: string; ok: boolean; status?: number; error?: string };
@@ -39,7 +39,8 @@ export function DshWizard({
   const [sessions, setSessions] = useState<DshSessionChoice[]>([]);
   const [catalog, setCatalog] = useState<DshCatalogView | null>(null);
   const [testedKey, setTestedKey] = useState("");
-  const [sessionId, setSessionId] = useState(initial?.sessionId ?? "");
+  const [dedicatedSessionId, setDedicatedSessionId] = useState("");
+  const [advancedSessionId, setAdvancedSessionId] = useState("");
   const [modelKey, setModelKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -120,17 +121,17 @@ export function DshWizard({
         error?: string;
         sessions?: DshSessionChoice[];
         catalog?: DshCatalogView;
+        dedicatedSession?: DshSessionChoice;
       };
-      if (!response.ok || !Array.isArray(data.sessions)) {
-        setError(data.error || "连接测试没有通过。");
+      if (!response.ok || !data.dedicatedSession?.sessionId) {
+        setError(data.error || "没能新建围读专用会话。");
         return;
       }
-      setSessions(data.sessions);
+      setSessions(data.sessions ?? []);
       setCatalog(data.catalog ?? null);
+      setDedicatedSessionId(data.dedicatedSession.sessionId);
+      setAdvancedSessionId("");
       setTestedKey(`${nextParsed.baseUrl}\n${read.token}\n${basicUser}\n${basicPassword}`);
-      if (!data.sessions.some((item) => item.sessionId === sessionId)) {
-        setSessionId(data.sessions[0]?.sessionId ?? "");
-      }
       setStep(4);
     } catch {
       setError(controller.signal.aborted ? "连接测试超时，没有一直等下去。" : "连接测试没有通过。");
@@ -141,6 +142,7 @@ export function DshWizard({
   }
 
   async function save() {
+    const sessionId = advancedSessionId.trim() || dedicatedSessionId;
     if (!parsed.ok || !tested || !sessionId) return;
     setSaving(true);
     setError("");
@@ -187,6 +189,7 @@ export function DshWizard({
         <h2 id="dsh-wizard-done" className="text-base font-medium">
           已连上你的 DSH
         </h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{DSH_DEDICATED_SESSION_NOTE}</p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{DSH_PLUGIN_NOTE}</p>
         <div className="mt-4">
           <Button type="button" onClick={onCancel}>
@@ -321,7 +324,7 @@ export function DshWizard({
 
       <StepCard n={3} title="令牌和可选的 Basic Auth" active={step === 3} done={step > 3 && tested} onEdit={() => setStep(3)}>
         <p className="text-sm leading-6 text-muted-foreground">
-          如果前面还有 Basic Auth，用户名和密码分开填，没有就留空。然后测试连接：列出会话，能拉到模型目录也会一并带上。
+          如果前面还有 Basic Auth，用户名和密码分开填，没有就留空。测试连接会核对这台 DSH，并新建一个围读专用会话。
         </p>
         <div className="mt-3 space-y-3">
           <div className="space-y-2">
@@ -386,35 +389,15 @@ export function DshWizard({
         </div>
       </StepCard>
 
-      <StepCard n={4} title="选择会话和模型" active={step === 4} done={false} onEdit={() => tested && setStep(4)}>
-        {tested ? (
+      <StepCard n={4} title="模型和专用会话" active={step === 4} done={false} onEdit={() => tested && setStep(4)}>
+        {tested && dedicatedSessionId ? (
           <>
-            <p className="text-sm leading-6 text-muted-foreground">
-              找到 {sessions.length} 个会话
-              {catalog?.loaded ? `，${catalog.options.length} 个模型` : "。模型目录这次没拉下来，可以先沿用会话当前的模型"}。
-              保存后出字走这条。{DSH_PLUGIN_NOTE}
-            </p>
+            <p className="text-sm leading-6 text-muted-foreground">{DSH_DEDICATED_SESSION_NOTE}</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{DSH_PLUGIN_NOTE}</p>
             <div className="mt-3 space-y-3">
               <div className="space-y-2">
-                <Label htmlFor="dsh-session">会话</Label>
-                <select
-                  id="dsh-session"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                  value={sessionId}
-                  disabled={busy}
-                  onChange={(event) => setSessionId(event.target.value)}
-                >
-                  {sessions.map((item) => (
-                    <option key={item.sessionId} value={item.sessionId}>
-                      {item.title === item.sessionId ? item.sessionId : `${item.title} · ${item.sessionId}`}
-                      {item.running ? "（正在写）" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="dsh-wizard-model">模型（可选）</Label>
-                {catalog?.loaded ? (
+                {catalog?.loaded && catalog.options.length > 0 ? (
                   <select
                     id="dsh-wizard-model"
                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
@@ -422,7 +405,7 @@ export function DshWizard({
                     disabled={busy}
                     onChange={(event) => setModelKey(event.target.value)}
                   >
-                    <option value="">沿用会话当前的模型</option>
+                    <option value="">沿用内核默认</option>
                     {catalog.options.map((option) => (
                       <option key={modelValue(option)} value={modelValue(option)}>
                         {option.name === option.model ? "" : `${option.name} · `}
@@ -432,22 +415,56 @@ export function DshWizard({
                   </select>
                 ) : (
                   <p id="dsh-wizard-model" className="text-sm leading-6 text-muted-foreground">
-                    {catalog?.error || "模型目录没拉下来。"} 保存后仍可选「沿用会话当前的模型」。
+                    {catalog?.loaded ? "目录里这次没有可选模型，保存后沿用内核默认。" : catalog?.error || "模型目录没拉下来。"} 这不挡保存。
                   </p>
                 )}
               </div>
+              <details className="rounded-lg border border-border px-3 py-2">
+                <summary className="cursor-pointer text-sm font-medium">{dshAdvancedSummary(Boolean(advancedSessionId.trim()))}</summary>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  默认不用你已有的对话。只有想让以后的新会话继承某个会话上的 agentPreset 时，再指定它。
+                </p>
+                <div className="mt-2 space-y-2">
+                  <Label htmlFor="dsh-advanced-session">模板会话 id</Label>
+                  <Input
+                    id="dsh-advanced-session"
+                    value={advancedSessionId}
+                    onChange={(event) => setAdvancedSessionId(event.target.value)}
+                    placeholder="留空则用刚建的围读会话"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={busy}
+                  />
+                  {sessions.length > 0 ? (
+                    <select
+                      aria-label="从已有会话填入"
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                      value={sessions.some((item) => item.sessionId === advancedSessionId) ? advancedSessionId : ""}
+                      disabled={busy}
+                      onChange={(event) => setAdvancedSessionId(event.target.value)}
+                    >
+                      <option value="">不指定</option>
+                      {sessions.map((item) => (
+                        <option key={item.sessionId} value={item.sessionId}>
+                          {item.title === item.sessionId ? item.sessionId : item.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+              </details>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" variant="outline" disabled={busy} onClick={() => setStep(3)}>
                 上一步
               </Button>
-              <Button type="button" disabled={busy || !sessionId} onClick={() => void save()}>
+              <Button type="button" disabled={busy || !(advancedSessionId.trim() || dedicatedSessionId)} onClick={() => void save()}>
                 {saving ? "正在保存…" : "保存并用于出字"}
               </Button>
             </div>
           </>
         ) : (
-          <p className="text-sm leading-6 text-muted-foreground">先在上一步通过连接测试，再选会话。</p>
+          <p className="text-sm leading-6 text-muted-foreground">先在上一步通过连接测试。围读会自己建会话。</p>
         )}
       </StepCard>
 

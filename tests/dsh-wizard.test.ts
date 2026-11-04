@@ -2,9 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { applyAccountTextPolicy, accountSettingsFields, publicConfigForAccount } from "../lib/account-policy";
 import { inspectDshConnection } from "../lib/dsh";
+import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { DshWizard } from "../components/dsh-wizard";
+import { dshRouteDetail } from "../components/settings-desk";
+import { complianceNoteForRoute } from "../lib/compliance";
+import { projectToMarkdown } from "../lib/markdown";
+import { createProjectRecord } from "../lib/pipeline";
 import {
   DEFAULT_DSH_PROBE_PORTS,
   DSH_TOKEN_HELP,
+  dshAdvancedSummary,
+  dshReconnectNotice,
+  dshSavedSummary,
   mergeDshEnv,
   parseDshBrowserUrl,
   parseDshConnectionPatch,
@@ -186,4 +197,44 @@ test("a saved wizard connection is the text route and the token stays out of pub
   const env = mergeDshEnv(stored, { DSH_BASE_URL: "http://env.example", DSH_TOKEN: "env", DSH_SESSION_ID: "env-session" });
   assert.equal(env?.DSH_BASE_URL, "http://127.0.0.1:3099");
   assert.equal(env?.DSH_SESSION_ID, "sess-1");
+});
+
+test("saved state, reconnect, and export notes do not show the session id", () => {
+  const id = "session-7823138a-ec27-457b-aeea-89299ca28f2d";
+  const line = dshSavedSummary({ baseUrl: "http://127.0.0.1:3080", tokenMask: "…fD5g" });
+  assert.equal(line, "已保存 http://127.0.0.1:3080，令牌 …fD5g。");
+  assert.equal(line.includes("会话"), false);
+  assert.equal(line.includes(id), false);
+  assert.equal(dshSavedSummary({ baseUrl: "http://127.0.0.1:3080" }), "已保存 http://127.0.0.1:3080。");
+  assert.equal(dshAdvancedSummary(true), "高级：已指定模板会话");
+  assert.equal(dshAdvancedSummary(true).includes(id), false);
+  assert.equal(dshReconnectNotice(false).includes(id), false);
+  assert.equal(dshReconnectNotice(true).includes(id), false);
+  assert.match(dshReconnectNotice(true), /已新建围读专用会话/);
+  assert.equal(dshRouteDetail(false).includes("再选会话"), false);
+  assert.match(dshRouteDetail(false), /自己建专用会话/);
+  const desk = readFileSync(new URL("../components/settings-desk.tsx", import.meta.url), "utf8");
+  const wizardSource = readFileSync(new URL("../components/dsh-wizard.tsx", import.meta.url), "utf8");
+  assert.equal(desk.includes("dshConnection.sessionId"), false);
+  assert.equal(wizardSource.includes("{dedicatedSessionId}"), false);
+  assert.equal(wizardSource.includes("${item.title} · ${item.sessionId}"), false);
+  assert.match(wizardSource, /围读会自己建会话/);
+  assert.match(wizardSource, /dshAdvancedSummary/);
+  const wizard = renderToStaticMarkup(
+    createElement(DshWizard, {
+      onCancel() {},
+      onSaved() {},
+      onUseCustom() {},
+    }),
+  );
+  assert.equal(wizard.includes(id), false);
+  assert.match(wizard, /模型和专用会话/);
+  const project = createProjectRecord({ id: "p-dsh", ownerId: "local", title: "稿", idea: "想法" });
+  const markdown = projectToMarkdown(project, "full", { textRoute: "dsh", dshConfigured: true });
+  assert.match(markdown, /出字经 DSH/);
+  assert.equal(markdown.includes(id), false);
+  assert.equal(complianceNoteForRoute("dsh", true).note.includes("session-"), false);
+  const api = readFileSync(new URL("../content/api.md", import.meta.url), "utf8");
+  assert.match(api, /不显示会话 id/);
+  assert.equal(api.includes("选会话和模型"), false);
 });

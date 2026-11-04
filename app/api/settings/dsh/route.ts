@@ -1,7 +1,9 @@
-import { isPresetAccount } from "@/lib/account-policy";
+import { accountSettingsFields, isPresetAccount, settingsVisibility } from "@/lib/account-policy";
 import { errorJson, isResponse, readJson, requireUser } from "@/lib/api";
-import { inspectDshConnection } from "@/lib/dsh";
-import { DSH_CONNECT_TIMEOUT_MS, parseDshBrowserUrl, parseProbePorts, probeLocalDshPorts, probePortsFromEnv, readDshTokenInput } from "@/lib/dsh-setup";
+import { ensureDshDeskSession, getDshConfig, provisionDshDesk } from "@/lib/dsh";
+import { DSH_CONNECT_TIMEOUT_MS, emptyDshConnection, parseDshBrowserUrl, parseProbePorts, probeLocalDshPorts, probePortsFromEnv, readDshTokenInput } from "@/lib/dsh-setup";
+import { getSettings, updateTextSettings } from "@/lib/store";
+import type { StoredDshConnection } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +21,7 @@ export async function POST(request: Request) {
   if (!isRecord(body)) return errorJson("请求格式不对。", 400);
   if (body.action === "probe") return probe(body);
   if (body.action === "test") return testConnection(body);
+  if (body.action === "reconnect") return reconnect(user.uid);
   return errorJson("不知道要做哪一步。", 400);
 }
 
@@ -49,14 +52,72 @@ async function testConnection(body: Record<string, unknown>) {
   if (basicUser && !basicPassword) return errorJson("填了 Basic Auth 用户名，还要密码。", 400);
   try {
     const signal = AbortSignal.timeout(DSH_CONNECT_TIMEOUT_MS);
-    const inspected = await inspectDshConnection(
+    const provisioned = await provisionDshDesk(
       { baseUrl: parsed.baseUrl, token, basicUser, basicPassword: basicUser ? basicPassword : "" },
       { signal },
     );
-    return Response.json({ baseUrl: parsed.baseUrl, sessions: inspected.sessions, catalog: inspected.catalog });
+    return Response.json({
+      baseUrl: parsed.baseUrl,
+      sessions: provisioned.sessions,
+      catalog: provisioned.catalog,
+      dedicatedSession: provisioned.dedicatedSession,
+    });
   } catch (error) {
     const aborted = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
     const message = aborted ? "连接测试超时，没有一直等下去。" : error instanceof Error ? error.message : "连不上这台 DSH。";
+    return errorJson(message, 400);
+  }
+}
+
+function storedOrEnvConnection(stored: StoredDshConnection): StoredDshConnection | null {
+  if (stored.baseUrl.trim() && stored.token.trim()) return stored;
+  const env = getDshConfig();
+  if (!env.baseUrl || !env.token) return null;
+  return {
+    baseUrl: env.baseUrl,
+    token: env.token,
+    sessionId: env.sessionId,
+    basicUser: env.basicUser,
+    basicPassword: env.basicPassword,
+  };
+}
+
+/** 用稿库（或环境）里的地址和令牌重连。会话还在就沿用，不在就新建。页面提示不带会话 id。 */
+async function reconnect(uid: string) {
+  let current;
+  try {
+    current = await getSettings(uid);
+  } catch {
+    return errorJson("稿库读不出来，请检查 data/store.json。", 500);
+  }
+  const source = storedOrEnvConnection(current.dsh ?? emptyDshConnection());
+  if (!source) return errorJson("还没有保存的 DSH 地址和令牌。请先连接。", 400);
+  try {
+    const signal = AbortSignal.timeout(DSH_CONNECT_TIMEOUT_MS);
+    const ensured = await ensureDshDeskSession(
+      {
+        baseUrl: source.baseUrl,
+        token: source.token,
+        basicUser: source.basicUser,
+        basicPassword: source.basicPassword,
+      },
+      source.sessionId,
+      { signal },
+    );
+    const connection = { ...source, sessionId: ensured.sessionId };
+    const persist = ensured.replaced || Boolean(current.dsh?.baseUrl.trim() && current.dsh.token.trim());
+    const saved = persist ? await updateTextSettings({ dsh: connection }, uid) : current;
+    const described = accountSettingsFields("owner", saved);
+    return Response.json({
+      ...described,
+      dshCatalog: ensured.catalog,
+      accountType: "owner",
+      settingsVisibility: settingsVisibility("owner"),
+      replaced: ensured.replaced,
+    });
+  } catch (error) {
+    const aborted = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    const message = aborted ? "重新连接超时，没有一直等下去。" : error instanceof Error ? error.message : "没能重新连接 DSH。";
     return errorJson(message, 400);
   }
 }

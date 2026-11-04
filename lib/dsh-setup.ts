@@ -11,6 +11,26 @@ export const DSH_CONNECT_TIMEOUT_MS = 8_000;
 
 export const DSH_PLUGIN_NOTE = "插件要你在自己的 DSH 里安装。围读不要求 purge，也不会替你装插件。";
 
+export const DSH_DEDICATED_SESSION_NOTE =
+  "已建好围读专用会话。出字时围读还会按这一轮再开新会话，不会占用你原来的对话。";
+
+/** 设置页已保存连接的那一行。只有地址和令牌末尾，不带会话 id。 */
+export function dshSavedSummary(connection: { baseUrl: string; tokenMask?: string }): string {
+  const base = connection.baseUrl.trim();
+  const mask = connection.tokenMask?.trim() ?? "";
+  return mask ? `已保存 ${base}，令牌 ${mask}。` : `已保存 ${base}。`;
+}
+
+/** 向导「高级」折叠标题。指定了模板时也不把会话 id 写在标题上。 */
+export function dshAdvancedSummary(pinned: boolean): string {
+  return pinned ? "高级：已指定模板会话" : "高级";
+}
+
+/** 重新连接后的提示。不带会话 id。 */
+export function dshReconnectNotice(replaced: boolean): string {
+  return replaced ? "原来的会话不在了，已新建围读专用会话。" : "已重新连上 DSH。";
+}
+
 export const DSH_TOKEN_HELP =
   "不是模型的 API Key。终端里 npx @deepseek-ai/dsh web 会印出 dsh web: http://127.0.0.1:3080/?token=…，填 token= 后面的值，或把整段地址贴进来。每次重新启动都会变；终端关了要再开一次。";
 
@@ -142,7 +162,7 @@ export function parseDshConnectionPatch(
   if (!token) return { ok: false, error: "要填写 DSH 令牌。" };
   const sessionId = typeof raw.sessionId === "string" ? raw.sessionId.trim() : "";
   if (!sessionId || sessionId.length > MAX_SESSION || /[\r\n]/.test(sessionId)) {
-    return { ok: false, error: "要选择一个 DSH 会话。" };
+    return { ok: false, error: "还没有围读专用会话。请先测试连接。" };
   }
   const basicUser = typeof raw.basicUser === "string" ? raw.basicUser.trim() : "";
   if (basicUser.length > MAX_BASIC_USER || /[\r\n]/.test(basicUser)) {
