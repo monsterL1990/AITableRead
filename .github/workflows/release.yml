@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to package, such as 0.1.0"
+        required: true
+        type: string
+
+jobs:
+  package:
+    name: zip and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        env:
+          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: |
+          version="${RAW_VERSION#v}"
+          case "$version" in
+            ""|.*|*..*|*[!0-9A-Za-z._+-]*)
+              echo "Version must look like 0.1.0. Got: ${RAW_VERSION}" >&2
+              exit 1
+              ;;
+          esac
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Package the zip
+        run: bash scripts/package-release.sh "${{ steps.version.outputs.version }}"
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="v${VERSION}"
+          zip="dist/WeiDu-${VERSION}.zip"
+          notes="$(mktemp)"
+          cat > "$notes" << EOF
+          WeiDu ${VERSION} is a local table-read desk you can unpack and run.
+
+          Install Node.js LTS from https://nodejs.org/, unpack the zip, and double-click start.bat. The browser opens at http://127.0.0.1:4721. No API key is required to click through the three steps; you get placeholder text. Put your real API in Settings when you want the model to write. A self-hosted DSH is optional.
+
+          围读 ${VERSION} 是可以解压后直接运行的本机围读台。
+
+          从 https://nodejs.org/ 安装 Node.js LTS，解压，双击 start.bat。浏览器打开 http://127.0.0.1:4721。不填 Key 也能把三个步骤点完，看到的是占位文字。要用模型出字，到设置里填写你的 API。自建 DSH 是可选的。
+          EOF
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$zip" --clobber
+          else
+            gh release create "$tag" "$zip" --title "WeiDu ${VERSION}" --notes-file "$notes"
+          fi
