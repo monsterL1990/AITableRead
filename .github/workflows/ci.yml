@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  check:
+    name: lint, types, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - name: Test
+        # runner is rejected in workflow env and in job env. A step can use it.
+        # Tests already use a temp directory; this is the fallback.
+        env:
+          GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
+        run: npm test
+      - run: npm run build
+
+  windows:
+    name: npm test on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Test
+        env:
+          GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
+        run: npm test
