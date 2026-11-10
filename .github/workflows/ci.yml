@@ -8,14 +8,15 @@ on:
 
 env:
   NEXT_TELEMETRY_DISABLED: "1"
-  # Tests already point GAOJIAN_DATA_FILE at a temp directory. This is the
-  # fallback so a missed path cannot write data/ inside the checkout.
-  GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
 
 jobs:
   check:
     name: lint, types, test, build
     runs-on: ubuntu-latest
+    env:
+      # runner is only available on a job or a step, not in the workflow env block.
+      # Tests already use a temp directory; this is the fallback.
+      GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,6 +32,8 @@ jobs:
   windows:
     name: npm test on Windows
     runs-on: windows-latest
+    env:
+      GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
