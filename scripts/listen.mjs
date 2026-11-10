@@ -74,15 +74,25 @@ export function localUrl(host, port) {
 /**
  * Process environment wins, then .env.local, then .env.
  * @param {string} root
+ * @param {Record<string, string | undefined>} env
+ * @param {string[]} names
+ */
+export function readScopedEnv(root, env, names) {
+  const envFile = readEnvFile(path.join(root, ".env"));
+  const localFile = readEnvFile(path.join(root, ".env.local"));
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const name of names) out[name] = pick(name, env, localFile, envFile);
+  return out;
+}
+
+/**
+ * Process environment wins, then .env.local, then .env.
+ * @param {string} root
  * @param {Record<string, string | undefined>} [env]
  */
 export function readListenTarget(root, env = process.env) {
-  const envFile = readEnvFile(path.join(root, ".env"));
-  const localFile = readEnvFile(path.join(root, ".env.local"));
-  const listenEnv = {
-    WEIDU_HOST: pick("WEIDU_HOST", env, localFile, envFile),
-    PORT: pick("PORT", env, localFile, envFile),
-  };
+  const listenEnv = readScopedEnv(root, env, ["WEIDU_HOST", "PORT"]);
   const host = resolveBindHost(listenEnv);
   const port = resolveBindPort(listenEnv);
   return { host, port, url: localUrl(host, port) };

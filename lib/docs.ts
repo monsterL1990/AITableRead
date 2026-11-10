@@ -18,7 +18,7 @@ export function loadDocMarkdown(slug: DocSlug, locale: Locale = "zh"): string {
     locale === "en"
       ? join(process.cwd(), "content", "en", doc.file)
       : join(process.cwd(), "content", doc.file);
-  return readFileSync(file, "utf8");
+  return readFileSync(/* turbopackIgnore: true */ file, "utf8");
 }
 
 export function parseInlines(text: string): Inline[] {

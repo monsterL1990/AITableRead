@@ -65,12 +65,18 @@ MIT 许可证，版权 2026 monsterL1990。
 
 没配模型时，稿房照样打开。横幅提示你去配置 API。写作按钮返回可编辑的中文占位稿，好让你把三步都走一遍。空 Key 不会让界面崩掉。
 
-## Windows：双击启动
+## 安装
 
-1. 装 [Node.js LTS](https://nodejs.org/)（20.9 或更新；22、24、26 都行）。安装包里带 npm。
-2. 双击 `start.bat`。
+从 [GitHub Releases](https://github.com/monsterL1990/AITableRead/releases) 下载和你的电脑匹配的压缩包，解压，运行里面的程序。不用安装 Node.js。
 
-macOS 与 Linux 使用请阅读 [安装与配置说明](SETUP.md)。
+- Windows 64 位（Intel / AMD）：`WeiDu-<version>-windows-amd64.zip`，双击 `WeiDu.exe`
+- Windows 64 位（ARM）：`WeiDu-<version>-windows-arm64.zip`，双击 `WeiDu.exe`
+- Linux x86_64：`WeiDu-<version>-linux-amd64.tar.gz`，在终端运行 `./weidu`
+- Linux ARM64：`WeiDu-<version>-linux-arm64.tar.gz`，在终端运行 `./weidu`
+
+浏览器打开 [http://127.0.0.1:4721](http://127.0.0.1:4721)。不填 Key 也能把三个步骤点完。窗口留到你停止为止。
+
+从源码运行是开发者的用法：安装 [Node.js LTS](https://nodejs.org/)（20.9 或更新），Windows 双击 `start.bat`，macOS 与 Linux 运行 `./start.sh`。细节在 [安装与配置说明](SETUP.md)。
 
 ---
 
@@ -141,9 +147,15 @@ Each step can be regenerated. Reader reviews are optional. A structural check ca
 
 With no model configured, the desk still opens. A banner asks you to configure an API. The writing buttons return editable Chinese placeholder text so you can walk the three steps. Empty keys do not crash the UI.
 
-## Windows: one double-click
+## Install
 
-1. Install [Node.js LTS](https://nodejs.org/) (20.9 or newer; 22, 24, or 26). The installer includes npm.
-2. Double-click `start.bat`.
+Download the archive that matches your machine from [GitHub Releases](https://github.com/monsterL1990/AITableRead/releases), unpack it, and run the program inside. You do not install Node.js.
 
-macOS and Linux: read the [setup guide](SETUP.md).
+- Windows 64-bit (Intel/AMD): `WeiDu-<version>-windows-amd64.zip`, double-click `WeiDu.exe`
+- Windows 64-bit (ARM): `WeiDu-<version>-windows-arm64.zip`, double-click `WeiDu.exe`
+- Linux x86_64: `WeiDu-<version>-linux-amd64.tar.gz`, run `./weidu` in a terminal
+- Linux ARM64: `WeiDu-<version>-linux-arm64.tar.gz`, run `./weidu` in a terminal
+
+The browser opens at [http://127.0.0.1:4721](http://127.0.0.1:4721). An empty key still walks the three steps. Leave the window open until you stop WeiDu.
+
+Running from source is the developer path: install [Node.js LTS](https://nodejs.org/) (20.9 or newer), double-click `start.bat` on Windows, or run `./start.sh` on macOS and Linux. Details are in the [setup guide](SETUP.md).

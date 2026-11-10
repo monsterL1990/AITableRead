@@ -122,7 +122,7 @@ function locked<T>(task: () => Promise<T>): Promise<T> {
 
 async function read(): Promise<AccountsFile> {
   try {
-    const raw = await readFile(accountsFile(), "utf8");
+    const raw = await readFile(/* turbopackIgnore: true */ accountsFile(), "utf8");
     if (!raw.trim()) return emptyFile();
     return normalize(JSON.parse(raw));
   } catch (error) {
@@ -134,10 +134,10 @@ async function read(): Promise<AccountsFile> {
 
 async function write(file: AccountsFile): Promise<void> {
   const target = accountsFile();
-  await mkdir(path.dirname(target), { recursive: true });
+  await mkdir(/* turbopackIgnore: true */ path.dirname(target), { recursive: true });
   const tmp = `${target}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(file, null, 2));
-  await rename(tmp, target);
+  await writeFile(/* turbopackIgnore: true */ tmp, JSON.stringify(file, null, 2));
+  await rename(/* turbopackIgnore: true */ tmp, /* turbopackIgnore: true */ target);
 }
 
 export async function hashPassword(password: string): Promise<{ hash: string; salt: string }> {
