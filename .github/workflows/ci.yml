@@ -13,10 +13,6 @@ jobs:
   check:
     name: lint, types, test, build
     runs-on: ubuntu-latest
-    env:
-      # runner is only available on a job or a step, not in the workflow env block.
-      # Tests already use a temp directory; this is the fallback.
-      GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,14 +22,17 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npx tsc --noEmit
-      - run: npm test
+      - name: Test
+        # runner is rejected in workflow env and in job env. A step can use it.
+        # Tests already use a temp directory; this is the fallback.
+        env:
+          GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
+        run: npm test
       - run: npm run build
 
   windows:
     name: npm test on Windows
     runs-on: windows-latest
-    env:
-      GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,4 +40,7 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Test
+        env:
+          GAOJIAN_DATA_FILE: ${{ runner.temp }}/weidu-ci-store.json
+        run: npm test
