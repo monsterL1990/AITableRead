@@ -7,55 +7,150 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to package, such as 0.1.0"
+        description: "Version to package, such as 0.1.1"
         required: true
         type: string
 
+# Do not reference the runner context from workflow or job env. GitHub rejects
+# that file and the workflow never starts. This file does not.
+
 jobs:
-  package:
-    name: zip and publish
+  source:
+    name: source zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Keep in sync with BUNDLED_NODE_VERSION in scripts/release-pack.mjs.
+          node-version: 22.23.4
+
+      - name: Package the source zip
+        env:
+          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: bash scripts/package-release.sh "$RAW_VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weidu-source
+          path: dist/*.zip
+          if-no-files-found: error
+
+  binary:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu-latest
+            platform: linux-amd64
+          - image: ubuntu-24.04-arm
+            platform: linux-arm64
+          - image: windows-latest
+            platform: windows-amd64
+          - image: windows-11-arm
+            platform: windows-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - run: npm ci
+
+      - name: Production build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: npm run build
+
+      - name: Compile the launcher
+        working-directory: scripts/launcher
+        env:
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags "-s -w" -o launcher .
+
+      - name: Assemble the portable package
+        env:
+          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          WEIDU_PLATFORM: ${{ matrix.platform }}
+        run: node scripts/release-pack.mjs assemble-ci
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weidu-${{ matrix.platform }}
+          path: dist/WeiDu-*.*
+          if-no-files-found: error
+
+  publish:
+    name: publish GitHub release
+    needs: [source, binary]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve version
-        id: version
-        env:
-          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-        run: |
-          version="${RAW_VERSION#v}"
-          case "$version" in
-            ""|.*|*..*|*[!0-9A-Za-z._+-]*)
-              echo "Version must look like 0.1.0. Got: ${RAW_VERSION}" >&2
-              exit 1
-              ;;
-          esac
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
 
-      - name: Package the zip
-        run: bash scripts/package-release.sh "${{ steps.version.outputs.version }}"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: weidu-*
+          path: dist/incoming
+          merge-multiple: true
 
-      - name: Publish the GitHub release
+      - name: Publish or update the release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
         run: |
-          tag="v${VERSION}"
-          zip="dist/WeiDu-${VERSION}.zip"
-          notes="$(mktemp)"
-          cat > "$notes" << EOF
-          WeiDu ${VERSION} is a local table-read desk you can unpack and run.
+          set -euo pipefail
+          version="$(node scripts/release-pack.mjs validate-version "$RAW_VERSION")"
+          tag="v${version}"
+          # v0.1.0 is already published as a source zip. Do not replace its assets.
+          if [[ "$tag" == "v0.1.0" ]]; then
+            echo "v0.1.0 is already published as a source zip. Use a new version tag." >&2
+            exit 1
+          fi
 
-          Install Node.js LTS from https://nodejs.org/, unpack the zip, and double-click start.bat. The browser opens at http://127.0.0.1:4721. No API key is required to click through the three steps; you get placeholder text. Put your real API in Settings when you want the model to write. A self-hosted DSH is optional.
+          declare -A by_name
+          while IFS= read -r file; do
+            by_name["$(basename "$file")"]="$file"
+          done < <(find dist/incoming -type f \( -name '*.zip' -o -name '*.tar.gz' \))
 
-          围读 ${VERSION} 是可以解压后直接运行的本机围读台。
+          expected=(
+            "WeiDu-${version}.zip"
+            "WeiDu-${version}-windows-amd64.zip"
+            "WeiDu-${version}-windows-arm64.zip"
+            "WeiDu-${version}-linux-amd64.tar.gz"
+            "WeiDu-${version}-linux-arm64.tar.gz"
+          )
+          files=()
+          for name in "${expected[@]}"; do
+            if [[ -z "${by_name[$name]:-}" ]]; then
+              echo "Missing release asset ${name}" >&2
+              find dist/incoming -type f -print >&2 || true
+              exit 1
+            fi
+            files+=("${by_name[$name]}")
+          done
 
-          从 https://nodejs.org/ 安装 Node.js LTS，解压，双击 start.bat。浏览器打开 http://127.0.0.1:4721。不填 Key 也能把三个步骤点完，看到的是占位文字。要用模型出字，到设置里填写你的 API。自建 DSH 是可选的。
-          EOF
+          mkdir -p dist
+          node scripts/release-pack.mjs notes "$version" > dist/release-notes.txt
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$zip" --clobber
+            gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "$zip" --title "WeiDu ${VERSION}" --notes-file "$notes"
+            gh release create "$tag" "${files[@]}" \
+              --title "WeiDu ${version}" \
+              --notes-file dist/release-notes.txt \
+              --target "$GITHUB_SHA"
           fi

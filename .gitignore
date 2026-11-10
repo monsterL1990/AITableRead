@@ -21,6 +21,11 @@
 /build
 /dist
 
+# native launcher built by the release workflow
+/scripts/launcher/launcher
+/scripts/launcher/launcher.exe
+/dist
+
 # misc
 .DS_Store
 *.pem

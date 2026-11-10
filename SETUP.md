@@ -1,6 +1,16 @@
 # 围读 · 安装与配置说明
 
-本文件是 [README.md](README.md) 里放不下的细节：怎么接模型、macOS 和 Linux 怎么起、数据存在哪、怎么验证装好了。只想快点用起来的话，看 README 的「Windows：双击启动」就够了。
+本文件是 [README.md](README.md) 里放不下的细节：免安装包怎么用、怎么接模型、开发者从源码怎么起、数据存在哪、怎么验证装好了。只想快点用起来的话，看 README 的「安装」就够了。
+
+## 免安装包
+
+从 [GitHub Releases](https://github.com/monsterL1990/AITableRead/releases) 下载 `WeiDu-<version>-windows-amd64.zip`、`WeiDu-<version>-windows-arm64.zip`、`WeiDu-<version>-linux-amd64.tar.gz` 或 `WeiDu-<version>-linux-arm64.tar.gz`。解压整个文件夹。Windows 双击 `WeiDu.exe`，Linux 在终端运行 `./weidu`。压缩包里已经带了对应系统的 Node.js，不用自己装，也不用 `npm install` 或 `npm run dev`。
+
+它和本机稿房一样，默认听 `127.0.0.1` 的 `4721`。`WEIDU_HOST` 和 `PORT` 的规则跟 `scripts/listen.mjs` 一样：进程环境优先，然后 `.env.local`，然后程序旁边的 `.env`。`WEIDU_NO_BROWSER=1` 时不打开浏览器。窗口一直留着，直到你关掉它或按 Ctrl+C。
+
+稿子在程序旁边的 `data/store.json`。`GAOJIAN_DATA_FILE` 仍可以改这个路径，`GAOJIAN_ACCOUNTS_FILE` 也没改名。登录默认关着，和 `npm run dev` 一样；只有环境或 `.env` 里写了 `WEIDU_AUTH=on` 才要密码。别在 `WEIDU_HOST=0.0.0.0` 的机器上把登录关掉再给别人连。
+
+同一次 Release 里的 `WeiDu-<version>.zip` 是源码包，给要改代码的人。那个包仍要 Node.js 和 `start.bat` / `start.sh`。
 
 ## 配置它
 
@@ -32,6 +42,8 @@ DSH 配齐了（向导或 `.env`）、设置里又没选过路由时，出字仍
 这个仓库里没有托管的围读服务，默认配置也不指向任何一个。
 
 ## macOS 与 Linux
+
+下面是从源码启动，给要改代码或自己构建的人。免安装包不用安装 Node，也不用这些命令。
 
 ```bash
 chmod +x start.sh   # 一次就够
@@ -85,13 +97,15 @@ docker compose up -d --build
 
 - `data/store.json` — 稿子和保存的自定义 API
 
-`./data` 已列进 gitignore。第一次写入时程序会自己建这个目录。目录不存在不影响启动。
+`./data` 已列进 gitignore。第一次写入时程序会自己建这个目录。目录不存在不影响启动。免安装包的稿子不在源码目录里，而在 `WeiDu.exe` / `weidu` 旁边的 `data/store.json`。
 
 要清空这台机器上的稿房：停掉围读，删掉 `data` 文件夹，再启动。下次会新建一个空稿库。删 `data` 不会动 `.env`。
 
 ## 怎么验证
 
-在一台装了 Node.js LTS 的机器上：
+免安装包在一台没有 Node 的机器上：解压对应系统的压缩包，运行 `WeiDu.exe` 或 `./weidu`。浏览器打开 http://127.0.0.1:4721，窗口要一直留着。`GET /api/config` 仍是 `demoMode: true`。
+
+从源码验证，在一台装了 Node.js LTS 的机器上：
 
 ```bash
 npm install
@@ -115,7 +129,7 @@ npm run dev
 ## 目录结构
 
 - 应用路由在 `app/`，生成和存储在 `lib/`。
-- `scripts/serve.mjs` 把 Next.js 起在上面那个回环地址上。
+- `scripts/serve.mjs` 把 Next.js 起在上面那个回环地址上。免安装包用 `scripts/desk.mjs` 和 `scripts/launcher`，把同一套监听规则套到 Next standalone 上。
 - 站内文档的中文在 `content/`，英文在 `content/en/`，跟界面语言走。配图在 `public/docs-assets/`。
 - 测试是 `npm test`（`tsx --test tests/*.test.ts`）。
 
@@ -123,7 +137,17 @@ npm run dev
 
 # WeiDu: setup and configuration
 
-This file holds the detail that does not belong on the project front page: how to point WeiDu at a model, starting it on macOS and Linux, where data lives, and how to check an install.
+This file holds the detail that does not belong on the project front page: the no-install packages, how to point WeiDu at a model, starting from source on macOS and Linux, where data lives, and how to check an install.
+
+## No-install packages
+
+Download `WeiDu-<version>-windows-amd64.zip`, `WeiDu-<version>-windows-arm64.zip`, `WeiDu-<version>-linux-amd64.tar.gz`, or `WeiDu-<version>-linux-arm64.tar.gz` from [GitHub Releases](https://github.com/monsterL1990/AITableRead/releases). Unpack the whole folder. On Windows, double-click `WeiDu.exe`. On Linux, run `./weidu` in a terminal. The archive already contains the Node.js build for that system. Do not install Node, and do not run `npm install` or `npm run dev`.
+
+It behaves like the local desk. The default listen address is `127.0.0.1` port `4721`. `WEIDU_HOST` and `PORT` follow `scripts/listen.mjs`: the process environment wins, then `.env.local`, then `.env` next to the program. `WEIDU_NO_BROWSER=1` skips the browser. The window stays open until you close it or press Ctrl+C.
+
+Manuscripts are `data/store.json` next to the program. `GAOJIAN_DATA_FILE` still overrides that path, and `GAOJIAN_ACCOUNTS_FILE` is unchanged. Login is off, as with `npm run dev`, unless `WEIDU_AUTH=on` is set in the environment or `.env`. Do not turn login off on a machine that also sets `WEIDU_HOST=0.0.0.0` and is reachable by other people.
+
+`WeiDu-<version>.zip` in the same release is the source tree for people changing the code. That zip still needs Node.js and `start.bat` / `start.sh`.
 
 ## Configure it
 
@@ -155,6 +179,8 @@ If DSH is fully configured (wizard or `.env`) and you have not picked a route in
 There is no hosted WeiDu service in this repository, and the defaults do not point at one.
 
 ## macOS and Linux
+
+The commands below are the from-source path, for people changing the code or building it themselves. The no-install package does not need Node or these commands.
 
 ```bash
 chmod +x start.sh   # once
@@ -208,13 +234,15 @@ Manuscripts, readers, prompts, settings, and saved API keys are files under `./d
 
 - `data/store.json` — manuscripts and the saved custom API
 
-`./data` is gitignored. The app creates the directory on the first write. A missing folder does not crash startup.
+`./data` is gitignored. The app creates the directory on the first write. A missing folder does not crash startup. The no-install package does not store manuscripts in the source tree. They are in `data/store.json` next to `WeiDu.exe` / `weidu`.
 
 To reset this machine's desk: stop WeiDu, delete the `data` folder, and start again. The next launch creates an empty store. Deleting `data` does not change `.env`.
 
 ## How to verify
 
-On a machine with Node.js LTS:
+For a no-install package, on a machine without Node: unpack the archive for that system and run `WeiDu.exe` or `./weidu`. The browser opens at http://127.0.0.1:4721 and the window stays open. `GET /api/config` still returns `demoMode: true`.
+
+To verify from source, on a machine with Node.js LTS:
 
 ```bash
 npm install
@@ -238,6 +266,6 @@ Not in this change:
 ## Layout
 
 - App routes live in `app/`. Generation and storage live in `lib/`.
-- `scripts/serve.mjs` starts Next.js on the loopback address above.
+- `scripts/serve.mjs` starts Next.js on the loopback address above. The no-install package uses `scripts/desk.mjs` and `scripts/launcher` to apply the same listen rules to the Next standalone server.
 - In-app docs follow the interface language: Chinese in `content/`, English in `content/en/`. Screenshots are in `public/docs-assets/`.
 - Tests are `npm test` (`tsx --test tests/*.test.ts`).
